@@ -5,7 +5,7 @@
       <div class="form-mask" @click="onClose" />
       <div class="form-dialog" @click="closeRepeatMenu">
         <div class="form-header">
-          <span class="form-title">新建日程</span>
+          <span class="form-title">{{ formTitle }}</span>
           <div class="close-btn" @click="onClose">
             <span>关闭</span>
           </div>
@@ -96,7 +96,7 @@
 
     <view class="form-dialog">
       <view class="form-header">
-        <text class="form-title">新建日程</text>
+        <text class="form-title">{{ formTitle }}</text>
         <view class="close-btn" @tap="onClose">
           <text>关闭</text>
         </view>
@@ -188,7 +188,9 @@ import DateTimePicker from '@/components/DateTimePicker/DateTimePicker.vue'
 
 const props = defineProps({
   visible: { type: Boolean, default: false },
-  defaultDate: { type: String, default: '' }
+  defaultDate: { type: String, default: '' },
+  mode: { type: String, default: 'create' },
+  eventData: { type: Object, default: null }
 })
 
 const emit = defineEmits(['close', 'save'])
@@ -227,6 +229,10 @@ const repeatLabel = computed(() => {
   return repeatOptions[repeatIndex.value]?.label || '不重复'
 })
 
+const formTitle = computed(() =>
+  props.mode === 'edit' ? '编辑日程' : '新建日程'
+)
+
 const startDisplay = computed(() => formatDateTimeRow(form.startDateTime))
 const endDisplay = computed(() => formatDateTimeRow(form.endDateTime))
 
@@ -246,7 +252,7 @@ watch(
       hideTimer = null
     }
     if (val) {
-      resetForm()
+      loadForm()
       mounted.value = true
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
@@ -284,6 +290,18 @@ function resetForm() {
   form.endDateTime = buildDefaultEnd()
   form.repeat_type = 'none'
   form.note = ''
+}
+
+function loadForm() {
+  if (props.mode === 'edit' && props.eventData) {
+    form.title = props.eventData.title || ''
+    form.startDateTime = props.eventData.start_time || buildDefaultStart()
+    form.endDateTime = props.eventData.end_time || buildDefaultEnd()
+    form.repeat_type = props.eventData.repeat_type || 'none'
+    form.note = props.eventData.note || ''
+    return
+  }
+  resetForm()
 }
 
 function onRepeatChange(e) {
@@ -338,6 +356,7 @@ function onSave() {
     return
   }
   emit('save', {
+    ...(props.mode === 'edit' && props.eventData ? { id: props.eventData.id } : {}),
     title: form.title.trim(),
     start_time: form.startDateTime,
     end_time: form.endDateTime,

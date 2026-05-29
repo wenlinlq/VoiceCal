@@ -19,6 +19,7 @@
       :current-date="calendarStore.currentDate"
       :disabled="isVoiceActive"
       @item-click="onEventClick"
+      @more="onMoreEvents"
     />
 
     <GlobalVoice />
@@ -73,9 +74,22 @@ function onMonthChange(year, month) {
   calendarStore.setViewMonth(year, month);
 }
 
+const PAGE_ANIM_DURATION = 320;
+
 function onEventClick(event) {
   uni.navigateTo({
-    url: `/pages/event-detail/event-detail?id=${event.id}`,
+    url: `/pages/event-detail/event-detail?id=${event.id}&from=index`,
+    animationType: "slide-in-right",
+    animationDuration: PAGE_ANIM_DURATION,
+  });
+}
+
+function onMoreEvents() {
+  if (isVoiceActive.value) return;
+  uni.navigateTo({
+    url: `/pages/day-events/day-events?date=${calendarStore.currentDate}`,
+    animationType: "slide-in-right",
+    animationDuration: PAGE_ANIM_DURATION,
   });
 }
 

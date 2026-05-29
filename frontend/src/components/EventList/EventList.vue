@@ -4,7 +4,7 @@
       <view class="header-left">
         <text class="header-title">{{ headerTitle }}</text>
       </view>
-      <view v-if="events.length > 0" class="header-more" @tap="$emit('more')">
+      <view class="header-more" @tap="$emit('more')">
         <text>更多</text>
         <text class="arrow">›</text>
       </view>
