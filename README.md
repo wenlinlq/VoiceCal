@@ -1,19 +1,13 @@
 # VoiceCal
-语音日历
 
-## 项目结构
+语音日历项目仓库。
 
-- `app/`: FastAPI + AgentScope Runtime 后端
-- `tests/`: 后端最小测试与 WebSocket 调试页
+## 目录结构
+
 - `frontend/`: 前端工程
+- `backend/`: FastAPI + AgentScope Runtime 后端
 
-## 智能处理能力
+## 说明
 
-- 支持自然语言时间解析
-- 支持时间冲突检测
-- 支持重复日程检测
-- 支持删除和修改时的歧义确认
-- 支持多轮上下文确认
-- 支持基于工具返回结果的二次推理
-- 支持空闲时间推荐
-- 支持面向语音场景的简洁回复
+- 后端原有工程、测试和文档已整理到 `backend/`
+- 前端工程保持在 `frontend/`
