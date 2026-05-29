@@ -6,7 +6,7 @@
 
       <view v-if="event" class="event-preview">
         <text class="preview-title">{{ event.title }}</text>
-        <text class="preview-time">🕐 {{ timeRange }}</text>
+        <text class="preview-time">{{ timeRange }}</text>
       </view>
 
       <view class="confirm-actions">

@@ -9,6 +9,14 @@
       }
     },
     {
+      "path": "pages/year-view/year-view",
+      "style": {
+        "navigationStyle": "custom",
+        "navigationBarTitleText": "年视图",
+        "backgroundColor": "#ffffff"
+      }
+    },
+    {
       "path": "pages/event-detail/event-detail",
       "style": {
         "navigationBarTitleText": "事件详情",

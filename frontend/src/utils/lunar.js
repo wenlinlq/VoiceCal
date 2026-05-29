@@ -138,4 +138,26 @@ export function getLunarLabel(year, month, day) {
   return lunar.festival || lunar.dayCn
 }
 
+/**
+ * 农历年份标签，如「丙午马年」
+ * @param {number} year
+ */
+export function getLunarYearLabel(year) {
+  const GAN = ['甲', '乙', '丙', '丁', '戊', '己', '庚', '辛', '壬', '癸']
+  const ZHI = ['子', '丑', '寅', '卯', '辰', '巳', '午', '未', '申', '酉', '戌', '亥']
+  const ZODIAC = ['鼠', '牛', '虎', '兔', '龙', '蛇', '马', '羊', '猴', '鸡', '狗', '猪']
+  const i = year - 4
+  return `${GAN[i % 10]}${ZHI[i % 12]}${ZODIAC[i % 12]}年`
+}
+
+/**
+ * 迷你日历下划线类型：初一蓝色，节日红色
+ */
+export function getLunarLineType(year, month, day) {
+  const lunar = solar2lunar(year, month, day)
+  if (lunar.festival) return 'red'
+  if (lunar.dayCn === '初一') return 'blue'
+  return null
+}
+
 export { solar2lunar }

@@ -1,18 +1,15 @@
-.calendar-view {
+.page-year {
+  min-height: 100vh;
   background: #fff;
-  padding: 0 32rpx 24rpx;
-  padding-top: calc(env(safe-area-inset-top) + 16rpx);
-
-  &.disabled {
-    opacity: 0.6;
-    pointer-events: none;
-  }
+  display: flex;
+  flex-direction: column;
+  padding-bottom: calc(180rpx + env(safe-area-inset-bottom));
 }
 
 .toolbar {
   display: flex;
   justify-content: flex-end;
-  margin-bottom: 8rpx;
+  padding: calc(env(safe-area-inset-top) + 16rpx) 32rpx 8rpx;
 }
 
 .toolbar-actions {
@@ -107,66 +104,87 @@
   }
 }
 
-.month-row {
-  margin-bottom: 24rpx;
-  min-height: 72rpx;
+.year-header {
+  padding: 0 32rpx 24rpx;
+}
+
+.year-header-main {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
-  gap: 16rpx;
+  gap: 24rpx;
 }
 
-.month-title-wrap {
-  display: flex;
-  align-items: center;
-  gap: 8rpx;
-  flex: 1;
-  min-width: 0;
-
-  &:active {
-    opacity: 0.65;
-  }
-}
-
-.date-offset {
-  font-size: 28rpx;
-  color: #666;
-  line-height: 1.2;
-  padding-bottom: 10rpx;
-  flex-shrink: 0;
-  white-space: nowrap;
-}
-
-.month-title {
-  font-size: 52rpx;
+.year-title {
+  font-size: 72rpx;
   font-weight: 700;
   color: #1a1a1a;
   letter-spacing: 2rpx;
+  line-height: 1;
 }
 
-.title-chevron {
-  font-size: 40rpx;
-  color: #bbb;
-  font-weight: 300;
-  transform: rotate(90deg);
-  margin-top: 4rpx;
+.legend {
+  display: flex;
+  gap: 24rpx;
+
+  &.legend-vertical {
+    flex-direction: column;
+    gap: 12rpx;
+    padding-bottom: 8rpx;
+  }
 }
 
-.month-view {
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  font-size: 22rpx;
+  color: #888;
+}
+
+.legend-line {
+  width: 24rpx;
+  height: 4rpx;
+  border-radius: 2rpx;
+
+  &.red {
+    background: #e53935;
+  }
+
+  &.blue {
+    background: #1a73e8;
+  }
+}
+
+.year-body {
+  flex: 1;
   overflow: hidden;
 }
 
 .slide-viewport {
   overflow: hidden;
   width: 100%;
+  height: 100%;
 }
 
 .slide-stage {
   position: relative;
   width: 100%;
+  height: 100%;
 }
 
-.month-panel {
+.year-scroll {
+  height: calc(100vh - 280rpx - env(safe-area-inset-top));
+}
+
+.months-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 16rpx;
+  padding: 0 32rpx 32rpx;
+}
+
+.year-panel {
   width: 100%;
 
   &.is-entering {
@@ -177,7 +195,6 @@
   }
 }
 
-/* 下一个月：旧页向左出，新页从右进 */
 .is-leaving.dir-next {
   animation: slideOutToLeft 0.32s cubic-bezier(0.25, 0.8, 0.25, 1) forwards;
 }
@@ -190,7 +207,6 @@
   }
 }
 
-/* 上一个月：旧页向右出，新页从左进 */
 .is-leaving.dir-prev {
   animation: slideOutToRight 0.32s cubic-bezier(0.25, 0.8, 0.25, 1) forwards;
 }

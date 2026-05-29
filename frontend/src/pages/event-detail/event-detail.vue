@@ -2,25 +2,24 @@
   <view class="page-detail">
     <view v-if="event" class="detail-content">
       <view class="title-section">
-        <text class="title-icon">📅</text>
         <text class="event-title">{{ event.title }}</text>
       </view>
 
       <view class="info-card">
         <view class="info-row">
-          <text class="info-label">🕐 时间</text>
+          <text class="info-label">时间</text>
           <text class="info-value">{{ timeRange }}</text>
         </view>
         <view class="info-row">
-          <text class="info-label">📅 日期</text>
+          <text class="info-label">日期</text>
           <text class="info-value">{{ displayDate }}</text>
         </view>
         <view class="info-row">
-          <text class="info-label">🔁 重复</text>
+          <text class="info-label">重复</text>
           <text class="info-value">{{ repeatLabel }}</text>
         </view>
         <view v-if="event.note" class="info-row">
-          <text class="info-label">📝 备注</text>
+          <text class="info-label">备注</text>
           <text class="info-value">{{ event.note }}</text>
         </view>
       </view>
@@ -34,23 +33,16 @@
         </view>
       </view>
 
-      <view class="voice-modify">
-        <RecordButton
-          status="idle"
-          position="bottom"
-          @start="onVoiceModify"
-        />
-        <text class="modify-hint">🎤 修改事件</text>
-      </view>
     </view>
 
     <view v-else class="not-found">
-      <text class="not-found-icon">😕</text>
       <text class="not-found-text">事件不存在</text>
       <view class="back-btn" @tap="goBack">
         <text>返回首页</text>
       </view>
     </view>
+
+    <GlobalVoice />
 
     <ConfirmDialog
       :visible="showDeleteConfirm"
@@ -67,8 +59,8 @@ import { ref, computed } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { useCalendarStore } from '@/store/modules/calendar.js'
 import { formatTime, formatDisplayDate, repeatTypeLabel } from '@/utils/date.js'
-import RecordButton from '@/components/RecordButton/RecordButton.vue'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog.vue'
+import GlobalVoice from '@/components/GlobalVoice/GlobalVoice.vue'
 
 const calendarStore = useCalendarStore()
 const event = ref(null)
@@ -114,10 +106,6 @@ function confirmDelete() {
   }
 }
 
-function onVoiceModify() {
-  uni.showToast({ title: '语音修改功能开发中', icon: 'none' })
-}
-
 function goBack() {
   uni.navigateBack({ fail: () => uni.reLaunch({ url: '/pages/index/index' }) })
 }
@@ -128,7 +116,7 @@ function goBack() {
   min-height: 100vh;
   background: #fff;
   padding: 24rpx;
-  padding-bottom: calc(48rpx + env(safe-area-inset-bottom));
+  padding-bottom: calc(180rpx + env(safe-area-inset-bottom));
 }
 
 .detail-content {
@@ -142,11 +130,6 @@ function goBack() {
   flex-direction: column;
   align-items: center;
   padding: 48rpx 0 32rpx;
-}
-
-.title-icon {
-  font-size: 64rpx;
-  margin-bottom: 16rpx;
 }
 
 .event-title {
@@ -222,29 +205,11 @@ function goBack() {
   border: 2rpx solid #ff6b6b;
 }
 
-.voice-modify {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  margin-top: 24rpx;
-}
-
-.modify-hint {
-  font-size: 26rpx;
-  color: #999;
-  margin-top: 16rpx;
-}
-
 .not-found {
   display: flex;
   flex-direction: column;
   align-items: center;
   padding-top: 200rpx;
-}
-
-.not-found-icon {
-  font-size: 80rpx;
-  margin-bottom: 16rpx;
 }
 
 .not-found-text {

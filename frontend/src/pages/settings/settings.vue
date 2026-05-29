@@ -3,7 +3,6 @@
     <view class="settings-group">
       <view class="settings-item" @tap="checkMicPermission">
         <view class="item-left">
-          <text class="item-icon">🎤</text>
           <view class="item-info">
             <text class="item-title">麦克风权限</text>
             <text class="item-desc">{{ micStatusText }}</text>
@@ -14,7 +13,6 @@
 
       <view class="settings-item" @tap="clearCache">
         <view class="item-left">
-          <text class="item-icon">🗑️</text>
           <view class="item-info">
             <text class="item-title">清除缓存</text>
             <text class="item-desc">清除本地存储的日程缓存</text>
@@ -27,7 +25,6 @@
     <view class="settings-group">
       <view class="settings-item column">
         <view class="item-left">
-          <text class="item-icon">🔗</text>
           <view class="item-info">
             <text class="item-title">WebSocket 服务器</text>
             <text class="item-desc">开发环境后端地址</text>
@@ -45,7 +42,6 @@
     <view class="settings-group">
       <view class="settings-item" @tap="showGuide">
         <view class="item-left">
-          <text class="item-icon">💡</text>
           <view class="item-info">
             <text class="item-title">使用引导</text>
             <text class="item-desc">语音指令示例</text>
@@ -56,7 +52,6 @@
 
       <view class="settings-item">
         <view class="item-left">
-          <text class="item-icon">ℹ️</text>
           <view class="item-info">
             <text class="item-title">关于</text>
             <text class="item-desc">语音日历 v1.0.0</text>
@@ -72,12 +67,15 @@
         <text class="guide-text">{{ item }}</text>
       </view>
     </view>
+
+    <GlobalVoice />
   </view>
 </template>
 
 <script setup>
 import { ref } from 'vue'
 import { useWebSocketStore } from '@/store/modules/websocket.js'
+import GlobalVoice from '@/components/GlobalVoice/GlobalVoice.vue'
 
 const wsStore = useWebSocketStore()
 const wsUrl = ref(wsStore.serverUrl)
@@ -153,7 +151,7 @@ function showGuide() {
   min-height: 100vh;
   background: #fff;
   padding: 24rpx;
-  padding-bottom: calc(48rpx + env(safe-area-inset-bottom));
+  padding-bottom: calc(180rpx + env(safe-area-inset-bottom));
 }
 
 .settings-group {
@@ -191,10 +189,6 @@ function showGuide() {
   align-items: center;
   gap: 20rpx;
   flex: 1;
-}
-
-.item-icon {
-  font-size: 36rpx;
 }
 
 .item-info {

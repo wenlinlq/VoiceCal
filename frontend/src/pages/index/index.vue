@@ -1,18 +1,11 @@
 <template>
   <view class="page-index">
-    <VoiceStatus
-      v-if="showVoiceStatus"
-      :agent-state="agentState"
-      :asr-text="voiceStore.displayText"
-      :visible="true"
-    />
-
     <CalendarView
       :events="calendarStore.events"
       :current-date="calendarStore.currentDate"
       :view-year="calendarStore.viewYear"
       :view-month="calendarStore.viewMonth"
-      :disabled="isInteractionDisabled"
+      :disabled="isVoiceActive"
       @date-change="onDateChange"
       @date-click="onDateChange"
       @month-change="onMonthChange"
@@ -24,19 +17,11 @@
     <EventList
       :events="calendarStore.todayEvents"
       :current-date="calendarStore.currentDate"
-      :disabled="isInteractionDisabled"
+      :disabled="isVoiceActive"
       @item-click="onEventClick"
     />
 
-    <view class="mic-area">
-      <FloatingMic
-        :show="true"
-        :status="voiceStore.status"
-        :disabled="voiceStore.status === 'processing'"
-        @start="onRecordStart"
-        @stop="onRecordStop"
-      />
-    </view>
+    <GlobalVoice />
 
     <ConfirmDialog
       :visible="confirmStore.visible"
@@ -56,117 +41,89 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
-import { formatDate } from '@/utils/date.js'
-import { useCalendarStore } from '@/store/modules/calendar.js'
-import { useVoiceStore } from '@/store/modules/voice.js'
-import { useConfirmStore } from '@/store/modules/confirm.js'
-import CalendarView from '@/components/CalendarView/CalendarView.vue'
-import EventList from '@/components/EventList/EventList.vue'
-import FloatingMic from '@/components/FloatingMic/FloatingMic.vue'
-import VoiceStatus from '@/components/VoiceStatus/VoiceStatus.vue'
-import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog.vue'
-import EventFormModal from '@/components/EventFormModal/EventFormModal.vue'
+import { ref, onMounted, onUnmounted } from "vue";
+import { formatDate } from "@/utils/date.js";
+import { useCalendarStore } from "@/store/modules/calendar.js";
+import { useConfirmStore } from "@/store/modules/confirm.js";
+import { useVoiceInteraction } from "@/composables/useVoiceInteraction.js";
+import CalendarView from "@/components/CalendarView/CalendarView.vue";
+import EventList from "@/components/EventList/EventList.vue";
+import GlobalVoice from "@/components/GlobalVoice/GlobalVoice.vue";
+import ConfirmDialog from "@/components/ConfirmDialog/ConfirmDialog.vue";
+import EventFormModal from "@/components/EventFormModal/EventFormModal.vue";
 
-const calendarStore = useCalendarStore()
-const voiceStore = useVoiceStore()
-const confirmStore = useConfirmStore()
+const calendarStore = useCalendarStore();
+const confirmStore = useConfirmStore();
+const { isVoiceActive } = useVoiceInteraction();
+const showCreateForm = ref(false);
 
-const agentState = ref('listening')
-const showCreateForm = ref(false)
+onMounted(() => {
+  uni.$on("calendar:openCreate", openCreateForm);
+});
 
-const isInteractionDisabled = computed(() => {
-  return voiceStore.status === 'recording' || voiceStore.status === 'processing'
-})
-
-const showVoiceStatus = computed(() => {
-  return voiceStore.status !== 'idle' || !!voiceStore.displayText
-})
+onUnmounted(() => {
+  uni.$off("calendar:openCreate", openCreateForm);
+});
 
 function onDateChange(date) {
-  calendarStore.setCurrentDate(date)
+  calendarStore.setCurrentDate(date);
 }
 
 function onMonthChange(year, month) {
-  calendarStore.setViewMonth(year, month)
+  calendarStore.setViewMonth(year, month);
 }
 
 function onEventClick(event) {
   uni.navigateTo({
-    url: `/pages/event-detail/event-detail?id=${event.id}`
-  })
+    url: `/pages/event-detail/event-detail?id=${event.id}`,
+  });
 }
 
 function openCreateForm() {
-  showCreateForm.value = true
+  showCreateForm.value = true;
 }
 
 function goToday() {
-  const today = formatDate(new Date())
-  const now = new Date()
-  calendarStore.setCurrentDate(today)
-  calendarStore.setViewMonth(now.getFullYear(), now.getMonth())
+  const today = formatDate(new Date());
+  const now = new Date();
+  calendarStore.setCurrentDate(today);
+  calendarStore.setViewMonth(now.getFullYear(), now.getMonth());
 }
 
 function onMenu() {
   uni.showActionSheet({
-    itemList: ['设置', '使用引导'],
+    itemList: ["设置", "使用引导"],
     success: (res) => {
       if (res.tapIndex === 0) {
-        uni.navigateTo({ url: '/pages/settings/settings' })
+        uni.navigateTo({ url: "/pages/settings/settings" });
       } else if (res.tapIndex === 1) {
         uni.showModal({
-          title: '语音指令示例',
-          content: '「明天下午3点开会」— 添加日程\n「今天有什么安排」— 查看今日事件\n「删除今天下午3点的会」— 删除事件',
-          showCancel: false
-        })
+          title: "语音指令示例",
+          content:
+            "「明天下午3点开会」— 添加日程\n「今天有什么安排」— 查看今日事件\n「删除今天下午3点的会」— 删除事件",
+          showCancel: false,
+        });
       }
-    }
-  })
+    },
+  });
 }
 
 async function onCreateEvent(data) {
-  await calendarStore.addEvent(data)
-  showCreateForm.value = false
-  calendarStore.setCurrentDate(data.start_time.slice(0, 10))
-  uni.showToast({ title: '日程已创建', icon: 'success' })
-}
-
-function onRecordStart() {
-  voiceStore.setStatus('recording')
-  agentState.value = 'listening'
-  uni.vibrateShort({ type: 'light' })
-}
-
-function onRecordStop() {
-  voiceStore.setStatus('processing')
-  agentState.value = 'thinking'
-
-  setTimeout(() => {
-    voiceStore.setAsrText('明天下午3点开会', true)
-    agentState.value = 'listening'
-  }, 800)
-
-  setTimeout(() => {
-    agentState.value = 'speaking'
-    voiceStore.setStatus('speaking')
-  }, 2000)
-
-  setTimeout(() => {
-    voiceStore.reset()
-    agentState.value = 'listening'
-  }, 3500)
+  await calendarStore.addEvent(data);
+  showCreateForm.value = false;
+  calendarStore.setCurrentDate(data.start_time.slice(0, 10));
+  uni.showToast({ title: "日程已创建", icon: "success" });
 }
 
 function onConfirm() {
-  confirmStore.confirm()
+  confirmStore.confirm();
 }
 
 function onCancel() {
-  confirmStore.cancel()
+  confirmStore.cancel();
 }
 </script>
 
 <style lang="scss" scoped>
-@import './index.scss';
+@import "./index.scss";
 </style>
