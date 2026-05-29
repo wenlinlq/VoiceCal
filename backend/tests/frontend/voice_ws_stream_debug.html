@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VoiceCal WS 流式调试页</title>
+<style>
+* { box-sizing: border-box; }
+body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #0f172a; color: #e2e8f0; }
+.page { max-width: 1280px; margin: 0 auto; padding: 20px; }
+h1 { margin: 0 0 14px; font-size: 24px; color: #7dd3fc; }
+.desc { margin-bottom: 18px; color: #94a3b8; font-size: 14px; }
+.grid { display: grid; grid-template-columns: 420px 1fr; gap: 16px; }
+.card { background: #111827; border: 1px solid #1f2937; border-radius: 14px; padding: 16px; margin-bottom: 16px; box-shadow: 0 8px 24px rgba(0,0,0,0.22); }
+.card h2 { margin: 0 0 12px; font-size: 16px; color: #f8fafc; }
+.stack { display: flex; flex-direction: column; gap: 10px; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; }
+.row > * { flex: 1; min-width: 0; }
+label { display: block; font-size: 12px; color: #94a3b8; margin-bottom: 6px; }
+input, textarea, button { width: 100%; border-radius: 10px; border: 1px solid #334155; background: #0b1220; color: #e2e8f0; padding: 10px 12px; font-size: 14px; }
+textarea { min-height: 120px; resize: vertical; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+button { cursor: pointer; background: #2563eb; border: none; font-weight: 600; }
+button:hover { background: #3b82f6; }
+button:disabled { background: #334155; color: #94a3b8; cursor: not-allowed; }
+.green { background: #16a34a; }
+.green:hover { background: #22c55e; }
+.amber { background: #d97706; }
+.amber:hover { background: #f59e0b; }
+.slate { background: #475569; }
+.slate:hover { background: #64748b; }
+.danger { background: #b91c1c; }
+.danger:hover { background: #dc2626; }
+.badge { display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; }
+.ok { background: rgba(34,197,94,0.18); color: #4ade80; }
+.bad { background: rgba(239,68,68,0.18); color: #f87171; }
+.muted { color: #94a3b8; }
+.stat-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.stat { background: #0b1220; border: 1px solid #1e293b; border-radius: 12px; padding: 12px; }
+.stat .k { font-size: 12px; color: #94a3b8; margin-bottom: 4px; }
+.stat .v { font-size: 18px; font-weight: 700; color: #f8fafc; }
+.log { height: 620px; overflow-y: auto; padding: 12px; background: #020617; border: 1px solid #1e293b; border-radius: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; line-height: 1.5; }
+.line { margin-bottom: 6px; word-break: break-word; }
+.time { color: #64748b; margin-right: 6px; }
+.in { color: #4ade80; }
+.out { color: #7dd3fc; }
+.tts { color: #fbbf24; }
+.error { color: #f87171; }
+.reply { white-space: pre-wrap; min-height: 72px; background: #0b1220; border: 1px solid #1e293b; border-radius: 12px; padding: 12px; }
+.json-box { white-space: pre-wrap; min-height: 120px; background: #0b1220; border: 1px solid #1e293b; border-radius: 12px; padding: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+@media (max-width: 980px) { .grid { grid-template-columns: 1fr; } .log { height: 360px; } }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>VoiceCal WebSocket 流式调试页</h1>
+  <div class="desc">这个页面只保留最核心的 WebSocket 文本消息、流式 TTS、原始 JSON 发送和日志观测，适合专门排查 `agent.reply` / `tts.chunk` / `turn.done`。</div>
+
+  <div class="grid">
+    <div>
+      <div class="card">
+        <h2>连接</h2>
+        <div class="stack">
+          <div>
+            <label for="wsUrl">WebSocket 地址</label>
+            <input id="wsUrl" value="ws://localhost:8000/ws/voice">
+          </div>
+          <div class="row">
+            <div>
+              <label for="sessionId">session_id</label>
+              <input id="sessionId">
+            </div>
+            <div>
+              <label for="userId">user_id</label>
+              <input id="userId" value="demo_user">
+            </div>
+          </div>
+          <div class="row">
+            <button id="btnConnect" class="green">连接</button>
+            <button id="btnDisconnect" class="danger" disabled>断开</button>
+            <button id="btnUnlock" class="amber">解锁音频</button>
+          </div>
+          <div class="row">
+            <span id="connBadge" class="badge bad">未连接</span>
+            <span id="audioBadge" class="badge bad">音频未解锁</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>发送文本</h2>
+        <div class="stack">
+          <div>
+            <label for="textInput">text.message</label>
+            <textarea id="textInput" placeholder="例如：明天下午三点提醒我开组会">你好呀，帮我安排明天下午三点的组会提醒</textarea>
+          </div>
+          <div class="row">
+            <button id="btnSendText">发送文本</button>
+            <button id="btnReplay" class="slate" disabled>重播本轮音频</button>
+          </div>
+          <div class="row">
+            <button class="slate quick-text" data-text="你好呀">你好呀</button>
+            <button class="slate quick-text" data-text="明天下午三点提醒我开组会">创建提醒</button>
+            <button class="slate quick-text" data-text="今天有什么安排">查询日程</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>原始 JSON</h2>
+        <div class="stack">
+          <div>
+            <label for="rawJson">直接发送 WebSocket JSON</label>
+            <textarea id="rawJson">{
+  "type": "text.message",
+  "session_id": "",
+  "user_id": "demo_user",
+  "text": "你好呀"
+}</textarea>
+          </div>
+          <button id="btnSendRaw" class="slate">发送原始 JSON</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>最近结果</h2>
+        <div class="stack">
+          <div>
+            <label>agent.reply</label>
+            <div id="replyText" class="reply">-</div>
+          </div>
+          <div>
+            <label>最近一条消息 JSON</label>
+            <div id="lastMessage" class="json-box">-</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="card">
+        <h2>实时指标</h2>
+        <div class="stat-grid">
+          <div class="stat"><div class="k">本轮 chunk 数</div><div id="statChunks" class="v">0</div></div>
+          <div class="stat"><div class="k">本轮 PCM 字节</div><div id="statBytes" class="v">0</div></div>
+          <div class="stat"><div class="k">首包耗时</div><div id="statFirstChunk" class="v">-</div></div>
+          <div class="stat"><div class="k">本轮时长</div><div id="statTurnTime" class="v">-</div></div>
+          <div class="stat"><div class="k">缓冲秒数</div><div id="statBuffered" class="v">0.00s</div></div>
+          <div class="stat"><div class="k">播放状态</div><div id="statPlayback" class="v">idle</div></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>日志</h2>
+        <div id="log" class="log"></div>
+        <div class="row" style="margin-top:10px;">
+          <button id="btnClearLog" class="slate">清空日志</button>
+          <button id="btnResetTurn" class="slate">重置本轮状态</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let ws = null;
+let connectPromise = null;
+let sessionId = 'debug_' + Date.now();
+
+let audioCtx = null;
+let audioUnlocked = false;
+let playbackCursor = 0;
+let activeSources = new Set();
+let pendingQueue = [];
+let queuedSeconds = 0;
+let playbackStarted = false;
+let currentTurnLast = false;
+let turnAudioChunks = [];
+let turnChunkCount = 0;
+let turnAudioBytes = 0;
+let turnStartedAt = 0;
+let firstChunkAt = 0;
+
+const ttsSampleRate = 24000;
+const startBufferSeconds = 0.45;
+const resumeBufferSeconds = 0.25;
+
+const el = (id) => document.getElementById(id);
+
+function log(message, type = 'out') {
+  const div = document.createElement('div');
+  div.className = `line ${type}`;
+  div.innerHTML = `<span class="time">[${new Date().toLocaleTimeString()}]</span>${message}`;
+  el('log').appendChild(div);
+  el('log').scrollTop = el('log').scrollHeight;
+}
+
+function updateConnectionUI(connected) {
+  el('connBadge').textContent = connected ? '已连接' : '未连接';
+  el('connBadge').className = `badge ${connected ? 'ok' : 'bad'}`;
+  el('btnConnect').disabled = connected;
+  el('btnDisconnect').disabled = !connected;
+}
+
+function updateAudioUI() {
+  el('audioBadge').textContent = audioUnlocked ? '音频已解锁' : '音频未解锁';
+  el('audioBadge').className = `badge ${audioUnlocked ? 'ok' : 'bad'}`;
+}
+
+function updateStats() {
+  el('statChunks').textContent = String(turnChunkCount);
+  el('statBytes').textContent = String(turnAudioBytes);
+  el('statBuffered').textContent = `${queuedSeconds.toFixed(2)}s`;
+}
+
+function updatePlaybackState(text) {
+  el('statPlayback').textContent = text;
+}
+
+function newSessionId() {
+  sessionId = 'debug_' + Date.now();
+  el('sessionId').value = sessionId;
+}
+
+function resetTurnState() {
+  stopCurrentPlayback();
+  pendingQueue = [];
+  queuedSeconds = 0;
+  playbackStarted = false;
+  currentTurnLast = false;
+  turnAudioChunks = [];
+  turnChunkCount = 0;
+  turnAudioBytes = 0;
+  turnStartedAt = 0;
+  firstChunkAt = 0;
+  el('replyText').textContent = '-';
+  el('lastMessage').textContent = '-';
+  el('statFirstChunk').textContent = '-';
+  el('statTurnTime').textContent = '-';
+  updatePlaybackState('idle');
+  el('btnReplay').disabled = true;
+  updateStats();
+}
+
+function stopCurrentPlayback() {
+  for (const source of activeSources) {
+    try {
+      source.onended = null;
+      source.stop();
+    } catch (error) {}
+  }
+  activeSources.clear();
+  playbackCursor = 0;
+}
+
+async function ensureAudioContext(forceResume = false) {
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: ttsSampleRate });
+  }
+  if (forceResume && audioCtx.state === 'suspended') {
+    await audioCtx.resume();
+  }
+  audioUnlocked = audioCtx.state === 'running';
+  updateAudioUI();
+  return audioCtx;
+}
+
+function pcmBytesToBuffer(bytes) {
+  const frameCount = Math.floor(bytes.byteLength / 2);
+  if (frameCount <= 0) return null;
+  const buffer = audioCtx.createBuffer(1, frameCount, ttsSampleRate);
+  const channelData = buffer.getChannelData(0);
+  const view = new DataView(bytes.buffer, bytes.byteOffset, frameCount * 2);
+  for (let i = 0; i < frameCount; i++) {
+    channelData[i] = view.getInt16(i * 2, true) / 32768.0;
+  }
+  return buffer;
+}
+
+async function unlockAudio() {
+  try {
+    await ensureAudioContext(true);
+    audioUnlocked = audioCtx.state === 'running';
+    updateAudioUI();
+    log('音频上下文已解锁', 'in');
+  } catch (error) {
+    log('音频解锁失败: ' + error.message, 'error');
+  }
+}
+
+async function flushPlaybackQueue() {
+  await ensureAudioContext(false);
+  if (!audioCtx || audioCtx.state !== 'running') {
+    updatePlaybackState('waiting_unlock');
+    return false;
+  }
+
+  const needsRestart = playbackCursor <= audioCtx.currentTime + 0.02;
+  const targetBuffer = playbackStarted ? resumeBufferSeconds : startBufferSeconds;
+  if (!currentTurnLast && queuedSeconds < targetBuffer && needsRestart) {
+    updatePlaybackState(`buffering ${queuedSeconds.toFixed(2)}s`);
+    updateStats();
+    return false;
+  }
+
+  if (needsRestart) {
+    playbackCursor = audioCtx.currentTime + 0.05;
+  }
+
+  while (pendingQueue.length > 0) {
+    const item = pendingQueue.shift();
+    const buffer = pcmBytesToBuffer(item.bytes);
+    if (!buffer) continue;
+
+    playbackStarted = true;
+    queuedSeconds = Math.max(0, queuedSeconds - buffer.duration);
+
+    const source = audioCtx.createBufferSource();
+    source.buffer = buffer;
+    source.connect(audioCtx.destination);
+
+    const startAt = Math.max(playbackCursor, audioCtx.currentTime + 0.03);
+    playbackCursor = startAt + buffer.duration;
+    activeSources.add(source);
+
+    source.onended = () => {
+      activeSources.delete(source);
+      if (item.isLast && activeSources.size === 0 && pendingQueue.length === 0) {
+        updatePlaybackState('done');
+      }
+    };
+
+    source.start(startAt);
+    updatePlaybackState(`playing #${item.index}`);
+    log(`播放队列 chunk #${item.index}, ${(buffer.duration).toFixed(2)}s`, 'tts');
+  }
+
+  updateStats();
+  return true;
+}
+
+function buildTextMessage(text) {
+  return {
+    type: 'text.message',
+    session_id: el('sessionId').value.trim() || sessionId,
+    user_id: el('userId').value.trim() || 'demo_user',
+    text,
+  };
+}
+
+async function connectWs() {
+  if (ws && ws.readyState === WebSocket.OPEN) return;
+  if (ws && ws.readyState === WebSocket.CONNECTING && connectPromise) return connectPromise;
+
+  const url = el('wsUrl').value.trim();
+  if (!url) throw new Error('请先填写 WebSocket 地址');
+
+  log('开始连接: ' + url, 'out');
+  ws = new WebSocket(url);
+
+  ws.onopen = () => {
+    updateConnectionUI(true);
+    log('WebSocket 连接成功', 'in');
+  };
+
+  ws.onclose = () => {
+    updateConnectionUI(false);
+    log('WebSocket 已关闭', 'error');
+    connectPromise = null;
+  };
+
+  ws.onerror = () => {
+    log('WebSocket 连接异常', 'error');
+  };
+
+  ws.onmessage = async (event) => {
+    let raw = event.data;
+    if (raw instanceof Blob) raw = await raw.text();
+    try {
+      const msg = JSON.parse(raw);
+      await handleMessage(msg);
+    } catch (error) {
+      log('收到非 JSON 消息: ' + String(raw).slice(0, 160), 'error');
+    }
+  };
+
+  connectPromise = new Promise((resolve, reject) => {
+    ws.addEventListener('open', () => resolve(), { once: true });
+    ws.addEventListener('error', () => reject(new Error('连接失败')), { once: true });
+  }).finally(() => { connectPromise = null; });
+
+  return connectPromise;
+}
+
+function disconnectWs() {
+  if (ws) {
+    ws.close();
+    ws = null;
+  }
+}
+
+function sendJson(obj) {
+  if (!ws || ws.readyState !== WebSocket.OPEN) {
+    throw new Error('WebSocket 未连接');
+  }
+  const json = JSON.stringify(obj);
+  ws.send(json);
+  log('发送: ' + json, 'out');
+}
+
+async function sendTextMessage() {
+  const text = el('textInput').value.trim();
+  if (!text) {
+    log('请输入文本', 'error');
+    return;
+  }
+
+  await unlockAudio();
+  await connectWs();
+  resetTurnState();
+  turnStartedAt = performance.now();
+  sendJson(buildTextMessage(text));
+}
+
+async function sendRawJson() {
+  await connectWs();
+  const raw = el('rawJson').value.trim();
+  if (!raw) {
+    log('原始 JSON 为空', 'error');
+    return;
+  }
+  const parsed = JSON.parse(raw);
+  if (!parsed.session_id) parsed.session_id = el('sessionId').value.trim() || sessionId;
+  if (!parsed.user_id) parsed.user_id = el('userId').value.trim() || 'demo_user';
+  if (parsed.type === 'text.message') {
+    resetTurnState();
+    turnStartedAt = performance.now();
+  }
+  sendJson(parsed);
+}
+
+async function replayTurnAudio() {
+  if (turnAudioChunks.length === 0) {
+    log('当前没有可重播的音频', 'error');
+    return;
+  }
+  await unlockAudio();
+  stopCurrentPlayback();
+  pendingQueue = turnAudioChunks.map((bytes, index) => ({
+    bytes,
+    isLast: index === turnAudioChunks.length - 1,
+    index: index + 1,
+  }));
+  queuedSeconds = turnAudioChunks.reduce((sum, bytes) => sum + bytes.byteLength / 2 / ttsSampleRate, 0);
+  playbackStarted = false;
+  currentTurnLast = true;
+  await flushPlaybackQueue();
+}
+
+async function handleMessage(msg) {
+  el('lastMessage').textContent = JSON.stringify(msg, null, 2);
+
+  if (msg.type === 'agent.reply') {
+    el('replyText').textContent = msg.text || '';
+    log(`agent.reply: ${(msg.text || '').slice(0, 120)} need_confirm=${!!msg.need_confirm}`, 'in');
+    return;
+  }
+
+  if (msg.type === 'transcription') {
+    log(`transcription: ${(msg.text || '').slice(0, 120)}`, 'in');
+    return;
+  }
+
+  if (msg.type === 'tts.chunk') {
+    const binary = atob(msg.data || '');
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+
+    if (bytes.length === 0) {
+      currentTurnLast = !!msg.is_last;
+      log(`tts.chunk end marker${msg.is_last ? ' last' : ''}`, 'tts');
+      if (msg.is_last && activeSources.size === 0 && pendingQueue.length === 0) {
+        updatePlaybackState('done');
+      }
+      return;
+    }
+
+    if (!firstChunkAt && turnStartedAt) {
+      firstChunkAt = performance.now();
+      el('statFirstChunk').textContent = `${Math.round(firstChunkAt - turnStartedAt)}ms`;
+    }
+
+    turnChunkCount += 1;
+    turnAudioBytes += bytes.byteLength;
+    turnAudioChunks.push(bytes);
+    currentTurnLast = !!msg.is_last;
+    pendingQueue.push({ bytes, isLast: !!msg.is_last, index: turnChunkCount });
+    queuedSeconds += bytes.byteLength / 2 / ttsSampleRate;
+    el('btnReplay').disabled = false;
+
+    log(`tts.chunk #${turnChunkCount}: ${bytes.byteLength}B${msg.is_last ? ' last' : ''}`, 'tts');
+    updateStats();
+    await flushPlaybackQueue();
+    return;
+  }
+
+  if (msg.type === 'turn.done') {
+    if (turnStartedAt) {
+      el('statTurnTime').textContent = `${Math.round(performance.now() - turnStartedAt)}ms`;
+    }
+    log(`turn.done success=${msg.success}`, msg.success ? 'in' : 'error');
+    return;
+  }
+
+  if (msg.type === 'error') {
+    log(`error: ${msg.message}`, 'error');
+    return;
+  }
+
+  log('收到: ' + JSON.stringify(msg), 'in');
+}
+
+function clearLog() {
+  el('log').innerHTML = '';
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  newSessionId();
+  updateConnectionUI(false);
+  updateAudioUI();
+  updateStats();
+
+  el('btnConnect').addEventListener('click', () => connectWs().catch((error) => log(error.message, 'error')));
+  el('btnDisconnect').addEventListener('click', disconnectWs);
+  el('btnUnlock').addEventListener('click', unlockAudio);
+  el('btnSendText').addEventListener('click', () => sendTextMessage().catch((error) => log(error.message, 'error')));
+  el('btnSendRaw').addEventListener('click', () => sendRawJson().catch((error) => log(error.message, 'error')));
+  el('btnReplay').addEventListener('click', () => replayTurnAudio().catch((error) => log(error.message, 'error')));
+  el('btnClearLog').addEventListener('click', clearLog);
+  el('btnResetTurn').addEventListener('click', resetTurnState);
+
+  document.querySelectorAll('.quick-text').forEach((button) => {
+    button.addEventListener('click', () => {
+      el('textInput').value = button.dataset.text || '';
+    });
+  });
+});
+</script>
+</body>
+</html>
