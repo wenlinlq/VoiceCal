@@ -1,5 +1,5 @@
 <template>
-  <view class="page-index">
+  <view class="page-index" :style="pageBottomStyle">
     <CalendarView
       :events="calendarStore.events"
       :current-date="calendarStore.currentDate"
@@ -18,6 +18,7 @@
       :events="calendarStore.todayEvents"
       :current-date="calendarStore.currentDate"
       :disabled="isVoiceActive"
+      :limit="3"
       @item-click="onEventClick"
       @more="onMoreEvents"
     />
@@ -47,6 +48,7 @@ import { formatDate } from "@/utils/date.js";
 import { useCalendarStore } from "@/store/modules/calendar.js";
 import { useConfirmStore } from "@/store/modules/confirm.js";
 import { useVoiceInteraction } from "@/composables/useVoiceInteraction.js";
+import { useMpSafeArea } from "@/composables/useMpSafeArea.js";
 import CalendarView from "@/components/CalendarView/CalendarView.vue";
 import EventList from "@/components/EventList/EventList.vue";
 import GlobalVoice from "@/components/GlobalVoice/GlobalVoice.vue";
@@ -56,6 +58,7 @@ import EventFormModal from "@/components/EventFormModal/EventFormModal.vue";
 const calendarStore = useCalendarStore();
 const confirmStore = useConfirmStore();
 const { isVoiceActive } = useVoiceInteraction();
+const { pageBottomStyle } = useMpSafeArea();
 const showCreateForm = ref(false);
 
 onMounted(() => {
@@ -123,10 +126,14 @@ function onMenu() {
 }
 
 async function onCreateEvent(data) {
-  await calendarStore.addEvent(data);
-  showCreateForm.value = false;
-  calendarStore.setCurrentDate(data.start_time.slice(0, 10));
-  uni.showToast({ title: "日程已创建", icon: "success" });
+  try {
+    await calendarStore.addEvent(data);
+    showCreateForm.value = false;
+    calendarStore.setCurrentDate(data.start_time.slice(0, 10));
+    uni.showToast({ title: "日程已创建", icon: "success" });
+  } catch (error) {
+    uni.showToast({ title: error.message || "创建失败", icon: "none" });
+  }
 }
 
 function onConfirm() {

@@ -1,5 +1,8 @@
 .page-index {
   min-height: 100vh;
   background: #fff;
+
+  /* #ifndef MP-WEIXIN */
   padding-bottom: calc(180rpx + env(safe-area-inset-bottom));
+  /* #endif */
 }

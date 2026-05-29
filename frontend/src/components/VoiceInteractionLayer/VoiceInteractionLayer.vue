@@ -97,22 +97,20 @@ onBeforeUnmount(() => {
 .voice-panel-wrap {
   position: absolute;
   top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%) scale(0.96);
+  left: 32rpx;
+  right: 32rpx;
+  width: auto;
+  transform: translateY(-50%) scale(0.96);
   z-index: 2;
   opacity: 0;
   transition: opacity 0.35s ease, transform 0.35s ease;
   pointer-events: none;
-  width: 100%;
-  display: flex;
-  justify-content: center;
-  padding: 0 48rpx;
   box-sizing: border-box;
 }
 
 .voice-layer.active .voice-panel-wrap {
   opacity: 1;
-  transform: translate(-50%, -50%) scale(1);
+  transform: translateY(-50%) scale(1);
   pointer-events: auto;
 }
 </style>

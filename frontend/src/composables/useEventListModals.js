@@ -20,18 +20,26 @@ export function useEventListModals() {
 
   async function saveEdit(data) {
     if (!editingEvent.value) return;
-    await calendarStore.updateEvent({ id: editingEvent.value.id, ...data });
-    showEditForm.value = false;
-    editingEvent.value = null;
-    uni.showToast({ title: "已保存", icon: "success" });
+    try {
+      await calendarStore.updateEvent({ id: editingEvent.value.id, ...data });
+      showEditForm.value = false;
+      editingEvent.value = null;
+      uni.showToast({ title: "已保存", icon: "success" });
+    } catch (error) {
+      uni.showToast({ title: error.message || "保存失败", icon: "none" });
+    }
   }
 
   async function confirmDelete() {
     if (!deletingEvent.value) return;
-    await calendarStore.deleteEvent(deletingEvent.value.id);
-    showDeleteConfirm.value = false;
-    deletingEvent.value = null;
-    uni.showToast({ title: "已删除", icon: "success" });
+    try {
+      await calendarStore.deleteEvent(deletingEvent.value.id);
+      showDeleteConfirm.value = false;
+      deletingEvent.value = null;
+      uni.showToast({ title: "已删除", icon: "success" });
+    } catch (error) {
+      uni.showToast({ title: error.message || "删除失败", icon: "none" });
+    }
   }
 
   function closeEdit() {
