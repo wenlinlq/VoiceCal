@@ -61,8 +61,8 @@ const label = computed(() => {
   padding: 20rpx 24rpx;
   background: #fff;
   border-radius: 16rpx;
-  box-shadow: 0 4rpx 16rpx rgba(102, 126, 234, 0.1);
-  border-left: 6rpx solid #667eea;
+  box-shadow: 0 4rpx 16rpx rgba(26, 115, 232, 0.08);
+  border-left: 6rpx solid #1a73e8;
   animation: slide-down 0.3s ease;
 }
 
@@ -100,7 +100,7 @@ const label = computed(() => {
 
   .bar {
     width: 4rpx;
-    background: #667eea;
+    background: #1a73e8;
     border-radius: 2rpx;
     animation: bar-bounce 0.6s ease-in-out infinite;
 
@@ -120,7 +120,7 @@ const label = computed(() => {
   width: 48rpx;
   height: 48rpx;
   border: 3rpx solid #f0f0f0;
-  border-top-color: #667eea;
+  border-top-color: #1a73e8;
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
@@ -136,7 +136,7 @@ const label = computed(() => {
 
 .status-label {
   font-size: 28rpx;
-  color: #667eea;
+  color: #1a73e8;
   font-weight: 500;
   display: block;
 }

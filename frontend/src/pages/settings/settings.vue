@@ -151,7 +151,7 @@ function showGuide() {
 <style lang="scss" scoped>
 .page-settings {
   min-height: 100vh;
-  background: #f5f7fa;
+  background: #fff;
   padding: 24rpx;
   padding-bottom: calc(48rpx + env(safe-area-inset-bottom));
 }
@@ -252,7 +252,7 @@ function showGuide() {
 }
 
 .guide-dot {
-  color: #667eea;
+  color: #1a73e8;
   font-size: 28rpx;
   line-height: 1.6;
 }

@@ -126,7 +126,7 @@ function goBack() {
 <style lang="scss" scoped>
 .page-detail {
   min-height: 100vh;
-  background: #f5f7fa;
+  background: #fff;
   padding: 24rpx;
   padding-bottom: calc(48rpx + env(safe-area-inset-bottom));
 }
@@ -212,7 +212,7 @@ function goBack() {
 }
 
 .edit-btn {
-  background: linear-gradient(135deg, #667eea, #764ba2);
+  background: #1a73e8;
   color: #fff;
 }
 
@@ -255,7 +255,7 @@ function goBack() {
 
 .back-btn {
   padding: 16rpx 48rpx;
-  background: linear-gradient(135deg, #667eea, #764ba2);
+  background: #1a73e8;
   color: #fff;
   border-radius: 40rpx;
   font-size: 28rpx;

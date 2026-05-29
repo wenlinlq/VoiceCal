@@ -1,46 +1,71 @@
 <template>
-  <view class="calendar-view" :class="{ disabled }">
-    <view class="calendar-header">
-      <view class="nav-btn" @tap="prevMonth">
-        <text class="nav-icon">‹</text>
-      </view>
-      <text class="month-title">{{ monthTitle }}</text>
-      <view class="nav-btn" @tap="nextMonth">
-        <text class="nav-icon">›</text>
+  <view
+    class="calendar-view"
+    :class="{ disabled }"
+    @touchstart="onTouchStart"
+    @touchend="onTouchEnd"
+  >
+    <!-- 顶部操作栏 -->
+    <view class="toolbar">
+      <view class="toolbar-actions">
+        <view class="icon-btn" @tap.stop="emit('add')">
+          <view class="icon-plus" />
+        </view>
+        <view class="icon-btn" @tap.stop="emit('today')">
+          <view class="icon-calendar">
+            <view class="cal-dot" />
+          </view>
+        </view>
+        <view class="icon-btn" @tap.stop="emit('menu')">
+          <view class="icon-more">
+            <view class="dot" />
+            <view class="dot" />
+            <view class="dot" />
+          </view>
+        </view>
       </view>
     </view>
 
+    <!-- 年月标题 -->
+    <view class="month-row">
+      <text class="month-title">{{ viewYear }} / {{ viewMonth + 1 }}</text>
+    </view>
+
+    <!-- 星期行 -->
     <view class="weekday-row">
       <text v-for="label in weekdayLabels" :key="label" class="weekday-cell">{{ label }}</text>
     </view>
 
+    <!-- 日期网格 -->
     <view class="days-grid">
       <view
-        v-for="day in calendarDays"
+        v-for="day in enrichedDays"
         :key="day.date"
         class="day-cell"
         :class="{
           'other-month': !day.isCurrentMonth,
-          today: day.isToday,
           selected: day.date === currentDate,
-          'has-event': hasEvent(day.date)
+          rest: day.mark?.type === 'rest' && day.date !== currentDate,
+          work: day.mark?.type === 'work' && day.date !== currentDate
         }"
         @tap="onDayClick(day)"
       >
+        <view v-if="day.mark?.tag" class="day-tag" :class="day.mark.type">
+          <text>{{ day.mark.tag }}</text>
+        </view>
+        <view v-if="day.hasEvent" class="event-dot" />
         <text class="day-num">{{ day.day }}</text>
-        <view v-if="hasEvent(day.date)" class="event-dot" />
+        <text class="day-sub" :class="{ 'sub-white': day.date === currentDate }">{{ day.subLabel }}</text>
       </view>
-    </view>
-
-    <view v-if="!hasMonthEvents" class="empty-hint">
-      <text>本月暂无日程</text>
     </view>
   </view>
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { getCalendarDays, WEEKDAY_LABELS } from '@/utils/date.js'
+import { getLunarLabel } from '@/utils/lunar.js'
+import { getHolidayMark } from '@/utils/holidays.js'
 
 const props = defineProps({
   events: { type: Array, default: () => [] },
@@ -50,11 +75,10 @@ const props = defineProps({
   disabled: { type: Boolean, default: false }
 })
 
-const emit = defineEmits(['dateChange', 'dateClick', 'monthChange'])
+const emit = defineEmits(['dateChange', 'dateClick', 'monthChange', 'add', 'today', 'menu'])
 
 const weekdayLabels = WEEKDAY_LABELS
-
-const monthTitle = computed(() => `${props.viewYear}年${props.viewMonth + 1}月`)
+const touchStartX = ref(0)
 
 const calendarDays = computed(() => getCalendarDays(props.viewYear, props.viewMonth))
 
@@ -64,9 +88,19 @@ const eventDateSet = computed(() => {
   return set
 })
 
-const hasMonthEvents = computed(() => {
-  const prefix = `${props.viewYear}-${String(props.viewMonth + 1).padStart(2, '0')}`
-  return props.events.some((e) => e.start_time.startsWith(prefix))
+const enrichedDays = computed(() => {
+  return calendarDays.value.map((day) => {
+    const [y, m, d] = day.date.split('-').map(Number)
+    const mark = getHolidayMark(day.date)
+    const lunarLabel = getLunarLabel(y, m, d)
+    const subLabel = mark?.festival || lunarLabel
+    return {
+      ...day,
+      mark,
+      subLabel,
+      hasEvent: eventDateSet.value.has(day.date)
+    }
+  })
 })
 
 function hasEvent(dateStr) {
@@ -79,26 +113,23 @@ function onDayClick(day) {
   emit('dateChange', day.date)
 }
 
-function prevMonth() {
+function changeMonth(delta) {
   if (props.disabled) return
   let y = props.viewYear
-  let m = props.viewMonth - 1
-  if (m < 0) {
-    m = 11
-    y -= 1
-  }
+  let m = props.viewMonth + delta
+  if (m < 0) { m = 11; y -= 1 }
+  if (m > 11) { m = 0; y += 1 }
   emit('monthChange', y, m)
 }
 
-function nextMonth() {
-  if (props.disabled) return
-  let y = props.viewYear
-  let m = props.viewMonth + 1
-  if (m > 11) {
-    m = 0
-    y += 1
-  }
-  emit('monthChange', y, m)
+function onTouchStart(e) {
+  touchStartX.value = e.changedTouches[0].clientX
+}
+
+function onTouchEnd(e) {
+  const diff = e.changedTouches[0].clientX - touchStartX.value
+  if (Math.abs(diff) < 60) return
+  changeMonth(diff < 0 ? 1 : -1)
 }
 </script>
 

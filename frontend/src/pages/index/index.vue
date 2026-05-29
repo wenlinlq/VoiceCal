@@ -1,15 +1,5 @@
 <template>
   <view class="page-index">
-    <view class="top-bar">
-      <view class="ws-status" :class="{ connected: wsStore.connected }">
-        <view class="status-dot" />
-        <text>{{ wsStore.connected ? '已连接' : '未连接' }}</text>
-      </view>
-      <view class="settings-btn" @tap="goSettings">
-        <text>⚙️</text>
-      </view>
-    </view>
-
     <VoiceStatus
       v-if="showVoiceStatus"
       :agent-state="agentState"
@@ -26,6 +16,9 @@
       @date-change="onDateChange"
       @date-click="onDateChange"
       @month-change="onMonthChange"
+      @add="openCreateForm"
+      @today="goToday"
+      @menu="onMenu"
     />
 
     <EventList
@@ -52,27 +45,35 @@
       @confirm="onConfirm"
       @cancel="onCancel"
     />
+
+    <EventFormModal
+      :visible="showCreateForm"
+      :default-date="calendarStore.currentDate"
+      @close="showCreateForm = false"
+      @save="onCreateEvent"
+    />
   </view>
 </template>
 
 <script setup>
 import { computed, ref } from 'vue'
+import { formatDate } from '@/utils/date.js'
 import { useCalendarStore } from '@/store/modules/calendar.js'
 import { useVoiceStore } from '@/store/modules/voice.js'
-import { useWebSocketStore } from '@/store/modules/websocket.js'
 import { useConfirmStore } from '@/store/modules/confirm.js'
 import CalendarView from '@/components/CalendarView/CalendarView.vue'
 import EventList from '@/components/EventList/EventList.vue'
 import FloatingMic from '@/components/FloatingMic/FloatingMic.vue'
 import VoiceStatus from '@/components/VoiceStatus/VoiceStatus.vue'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog.vue'
+import EventFormModal from '@/components/EventFormModal/EventFormModal.vue'
 
 const calendarStore = useCalendarStore()
 const voiceStore = useVoiceStore()
-const wsStore = useWebSocketStore()
 const confirmStore = useConfirmStore()
 
 const agentState = ref('listening')
+const showCreateForm = ref(false)
 
 const isInteractionDisabled = computed(() => {
   return voiceStore.status === 'recording' || voiceStore.status === 'processing'
@@ -96,8 +97,39 @@ function onEventClick(event) {
   })
 }
 
-function goSettings() {
-  uni.navigateTo({ url: '/pages/settings/settings' })
+function openCreateForm() {
+  showCreateForm.value = true
+}
+
+function goToday() {
+  const today = formatDate(new Date())
+  const now = new Date()
+  calendarStore.setCurrentDate(today)
+  calendarStore.setViewMonth(now.getFullYear(), now.getMonth())
+}
+
+function onMenu() {
+  uni.showActionSheet({
+    itemList: ['设置', '使用引导'],
+    success: (res) => {
+      if (res.tapIndex === 0) {
+        uni.navigateTo({ url: '/pages/settings/settings' })
+      } else if (res.tapIndex === 1) {
+        uni.showModal({
+          title: '语音指令示例',
+          content: '「明天下午3点开会」— 添加日程\n「今天有什么安排」— 查看今日事件\n「删除今天下午3点的会」— 删除事件',
+          showCancel: false
+        })
+      }
+    }
+  })
+}
+
+async function onCreateEvent(data) {
+  await calendarStore.addEvent(data)
+  showCreateForm.value = false
+  calendarStore.setCurrentDate(data.start_time.slice(0, 10))
+  uni.showToast({ title: '日程已创建', icon: 'success' })
 }
 
 function onRecordStart() {
@@ -110,7 +142,6 @@ function onRecordStop() {
   voiceStore.setStatus('processing')
   agentState.value = 'thinking'
 
-  // 静态演示：模拟 ASR 识别与处理流程
   setTimeout(() => {
     voiceStore.setAsrText('明天下午3点开会', true)
     agentState.value = 'listening'

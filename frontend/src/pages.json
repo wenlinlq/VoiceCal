@@ -3,32 +3,32 @@
     {
       "path": "pages/index/index",
       "style": {
+        "navigationStyle": "custom",
         "navigationBarTitleText": "语音日历",
-        "navigationBarBackgroundColor": "#667eea",
-        "navigationBarTextStyle": "white"
+        "backgroundColor": "#ffffff"
       }
     },
     {
       "path": "pages/event-detail/event-detail",
       "style": {
         "navigationBarTitleText": "事件详情",
-        "navigationBarBackgroundColor": "#667eea",
-        "navigationBarTextStyle": "white"
+        "navigationBarBackgroundColor": "#ffffff",
+        "navigationBarTextStyle": "black"
       }
     },
     {
       "path": "pages/settings/settings",
       "style": {
         "navigationBarTitleText": "设置",
-        "navigationBarBackgroundColor": "#667eea",
-        "navigationBarTextStyle": "white"
+        "navigationBarBackgroundColor": "#ffffff",
+        "navigationBarTextStyle": "black"
       }
     }
   ],
   "globalStyle": {
-    "navigationBarTextStyle": "white",
+    "navigationBarTextStyle": "black",
     "navigationBarTitleText": "语音日历",
-    "navigationBarBackgroundColor": "#667eea",
-    "backgroundColor": "#f5f7fa"
+    "navigationBarBackgroundColor": "#ffffff",
+    "backgroundColor": "#ffffff"
   }
 }

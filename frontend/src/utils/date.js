@@ -45,7 +45,7 @@ export function getCalendarDays(year, month) {
   const today = formatDate(new Date())
   const firstDay = new Date(year, month, 1)
   const lastDay = new Date(year, month + 1, 0)
-  const startWeekday = firstDay.getDay() === 0 ? 6 : firstDay.getDay() - 1
+  const startWeekday = firstDay.getDay()
 
   const days = []
 
@@ -100,4 +100,4 @@ export function repeatTypeLabel(type) {
   return map[type] || '不重复'
 }
 
-export const WEEKDAY_LABELS = ['一', '二', '三', '四', '五', '六', '日']
+export const WEEKDAY_LABELS = ['日', '一', '二', '三', '四', '五', '六']

@@ -42,6 +42,14 @@ const MOCK_EVENTS = [
     end_time: '2026-06-02 16:00:00',
     repeat_type: 'none',
     note: '地址：科技园A座'
+  },
+  {
+    id: 6,
+    title: '项目讨论',
+    start_time: '2026-05-15 14:00:00',
+    end_time: '2026-05-15 15:00:00',
+    repeat_type: 'none',
+    note: ''
   }
 ]
 

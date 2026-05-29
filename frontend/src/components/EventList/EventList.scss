@@ -1,9 +1,8 @@
 .event-list {
   background: #fff;
-  border-radius: 24rpx;
-  margin: 0 24rpx 24rpx;
-  padding: 24rpx;
-  box-shadow: 0 4rpx 24rpx rgba(102, 126, 234, 0.08);
+  margin: 0 32rpx 24rpx;
+  padding: 24rpx 0;
+  border-top: 1rpx solid #f0f0f0;
 }
 
 .list-header {
@@ -33,7 +32,7 @@
   display: flex;
   align-items: center;
   font-size: 26rpx;
-  color: #667eea;
+  color: #1a73e8;
 
   .arrow {
     margin-left: 4rpx;
@@ -74,12 +73,12 @@
   display: flex;
   align-items: center;
   padding: 20rpx;
-  background: #f8f9ff;
+  background: #f5f9ff;
   border-radius: 16rpx;
-  border-left: 6rpx solid #667eea;
+  border-left: 6rpx solid #1a73e8;
 
   &:active {
-    background: #f0f2ff;
+    background: #e8f4fd;
   }
 }
 
@@ -90,7 +89,7 @@
 
 .time-text {
   font-size: 26rpx;
-  color: #667eea;
+  color: #1a73e8;
   font-weight: 500;
   display: block;
 }

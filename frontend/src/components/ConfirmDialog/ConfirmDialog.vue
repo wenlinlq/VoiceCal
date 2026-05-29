@@ -103,11 +103,11 @@ function onCancel() {
 }
 
 .event-preview {
-  background: #f8f9ff;
+  background: #f5f9ff;
   border-radius: 16rpx;
   padding: 24rpx;
   margin-bottom: 32rpx;
-  border-left: 6rpx solid #667eea;
+  border-left: 6rpx solid #1a73e8;
 }
 
 .preview-title {
@@ -120,7 +120,7 @@ function onCancel() {
 
 .preview-time {
   font-size: 26rpx;
-  color: #667eea;
+  color: #1a73e8;
   display: block;
 }
 
@@ -150,7 +150,7 @@ function onCancel() {
 }
 
 .btn-confirm {
-  background: linear-gradient(135deg, #667eea, #764ba2);
+  background: #1a73e8;
   color: #fff;
 }
 </style>
