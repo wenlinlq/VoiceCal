@@ -76,6 +76,7 @@
 <script setup>
 import { ref, computed, nextTick } from "vue";
 import { shiftMonth, getDaysOffsetLabel } from "@/utils/date.js";
+import { raf } from "@/utils/raf.js";
 import CalendarMonthGrid from "@/components/CalendarMonthGrid/CalendarMonthGrid.vue";
 
 const props = defineProps({
@@ -143,7 +144,7 @@ function animateMonthChange(delta) {
   };
 
   nextTick(() => {
-    requestAnimationFrame(() => {
+    raf(() => {
       slideAnim.value.run = true;
     });
   });

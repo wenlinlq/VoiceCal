@@ -61,6 +61,7 @@
 
 <script setup>
 import { ref, computed, watch, onBeforeUnmount } from "vue";
+import { rafTwice } from "@/utils/raf.js";
 import { formatTime } from "@/utils/date.js";
 
 const props = defineProps({
@@ -97,10 +98,8 @@ watch(
     }
     if (val) {
       mounted.value = true;
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          active.value = true;
-        });
+      rafTwice(() => {
+        active.value = true;
       });
     } else if (mounted.value) {
       active.value = false;

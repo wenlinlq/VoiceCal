@@ -178,6 +178,7 @@
 
 <script setup>
 import { ref, reactive, watch, computed, onBeforeUnmount } from 'vue'
+import { rafTwice } from '@/utils/raf.js'
 import {
   formatDate,
   formatDateTimeValue,
@@ -254,10 +255,8 @@ watch(
     if (val) {
       loadForm()
       mounted.value = true
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          active.value = true
-        })
+      rafTwice(() => {
+        active.value = true
       })
     } else if (mounted.value) {
       active.value = false

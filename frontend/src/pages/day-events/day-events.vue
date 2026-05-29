@@ -11,37 +11,11 @@
       </view>
 
       <scroll-view scroll-y class="event-scroll" :show-scrollbar="false">
-        <view v-if="events.length === 0" class="empty-state">
-          <text class="empty-text">当日暂无日程</text>
-          <text class="empty-hint">长按麦克风添加事件</text>
-        </view>
-
-        <view v-else class="list-body">
-          <view
-            v-for="event in events"
-            :key="event.id"
-            class="event-item"
-            @tap="onEventClick(event)"
-          >
-            <view class="time-col">
-              <text class="time-text">{{ formatTime(event.start_time) }}</text>
-              <text v-if="event.end_time" class="time-end">{{
-                formatTime(event.end_time)
-              }}</text>
-            </view>
-            <view class="info-col">
-              <text class="event-title">{{ event.title }}</text>
-              <text
-                v-if="event.repeat_type && event.repeat_type !== 'none'"
-                class="repeat-badge"
-              >
-                {{ repeatLabel(event.repeat_type) }}
-              </text>
-              <text v-if="event.note" class="event-note">{{ event.note }}</text>
-            </view>
-            <text class="item-arrow">›</text>
-          </view>
-        </view>
+        <EventItemsList
+          :events="events"
+          show-note
+          @item-click="onEventClick"
+        />
       </scroll-view>
 
       <GlobalVoice />
@@ -53,12 +27,9 @@
 import { ref, computed } from "vue";
 import { onLoad } from "@dcloudio/uni-app";
 import { useCalendarStore } from "@/store/modules/calendar.js";
-import {
-  formatTime,
-  formatDisplayDate,
-  repeatTypeLabel,
-} from "@/utils/date.js";
+import { formatDisplayDate } from "@/utils/date.js";
 import { usePageSlideNav } from "@/composables/usePageSlideNav.js";
+import EventItemsList from "@/components/EventItemsList/EventItemsList.vue";
 import GlobalVoice from "@/components/GlobalVoice/GlobalVoice.vue";
 
 const { pageActive, pageLeaving, goBack, ANIM_DURATION } = usePageSlideNav({
@@ -87,10 +58,6 @@ const pageTitle = computed(() => {
 onLoad((query) => {
   date.value = query.date || calendarStore.currentDate;
 });
-
-function repeatLabel(type) {
-  return repeatTypeLabel(type);
-}
 
 function onEventClick(event) {
   uni.navigateTo({

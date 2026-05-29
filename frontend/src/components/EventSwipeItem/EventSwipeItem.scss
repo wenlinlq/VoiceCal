@@ -1,0 +1,225 @@
+$action-width: 280rpx;
+
+.swipe-item {
+  width: 100%;
+  overflow: hidden;
+  border-radius: 16rpx;
+}
+
+.swipe-track {
+  display: flex;
+  flex-direction: row;
+  width: calc(100% + #{$action-width});
+  will-change: transform;
+
+  &:not(.dragging) {
+    transition: transform 0.22s ease;
+  }
+}
+
+.swipe-content {
+  flex-shrink: 0;
+  width: calc(100% - #{$action-width});
+  display: flex;
+  align-items: stretch;
+  background: #f5f9ff;
+  border-left: 6rpx solid #1a73e8;
+  box-sizing: border-box;
+}
+
+.swipe-item.is-completed .swipe-content {
+  background: #f3f4f6;
+  border-left-color: #c5c9d0;
+
+  .time-text,
+  .time-end {
+    color: #bbb;
+  }
+
+  .event-title {
+    color: #aaa;
+    text-decoration: line-through;
+  }
+
+  .repeat-badge,
+  .event-note {
+    color: #ccc;
+  }
+
+  .item-arrow {
+    color: #ddd;
+  }
+}
+
+.swipe-actions {
+  flex-shrink: 0;
+  width: $action-width;
+  display: flex;
+}
+
+.action-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28rpx;
+  font-weight: 500;
+  color: #fff;
+
+  &:active {
+    opacity: 0.85;
+  }
+}
+
+.edit-btn {
+  background: #1a73e8;
+}
+
+.delete-btn {
+  background: #ff6b6b;
+}
+
+.event-checkbox {
+  width: 40rpx;
+  height: 40rpx;
+  margin: auto 12rpx auto 20rpx;
+  border: 2rpx solid #c5d3e8;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: #fff;
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease;
+
+  &.checked {
+    background: #1a73e8;
+    border-color: #1a73e8;
+  }
+}
+
+.check-mark {
+  font-size: 24rpx;
+  color: #fff;
+  line-height: 1;
+  font-weight: 700;
+}
+
+.event-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  padding: 20rpx 20rpx 20rpx 0;
+
+  &:active {
+    opacity: 0.85;
+  }
+}
+
+.time-col {
+  min-width: 108rpx;
+  margin-right: 12rpx;
+  flex-shrink: 0;
+}
+
+.time-text {
+  font-size: 26rpx;
+  color: #1a73e8;
+  font-weight: 500;
+  display: block;
+}
+
+.time-end {
+  font-size: 22rpx;
+  color: #aaa;
+  display: block;
+  margin-top: 4rpx;
+}
+
+.info-col {
+  flex: 1;
+  min-width: 0;
+}
+
+.event-title {
+  font-size: 28rpx;
+  color: #333;
+  font-weight: 500;
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.repeat-badge {
+  font-size: 22rpx;
+  color: #999;
+  margin-top: 4rpx;
+  display: block;
+}
+
+.event-note {
+  font-size: 22rpx;
+  color: #888;
+  margin-top: 4rpx;
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.item-arrow {
+  font-size: 32rpx;
+  color: #ccc;
+  margin-left: 8rpx;
+  flex-shrink: 0;
+}
+
+/* #ifdef H5 */
+.swipe-item {
+  border-radius: 12px;
+}
+
+.action-btn {
+  font-size: 14px;
+}
+
+.event-checkbox {
+  width: 22px;
+  height: 22px;
+  margin: auto 8px auto 12px;
+}
+
+.check-mark {
+  font-size: 13px;
+}
+
+.event-main {
+  padding: 12px 12px 12px 0;
+}
+
+.time-col {
+  min-width: 54px;
+  margin-right: 8px;
+}
+
+.time-text {
+  font-size: 14px;
+}
+
+.time-end {
+  font-size: 12px;
+}
+
+.event-title {
+  font-size: 15px;
+}
+
+.repeat-badge,
+.event-note {
+  font-size: 12px;
+}
+/* #endif */

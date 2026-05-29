@@ -67,6 +67,7 @@
 
 <script setup>
 import { ref, computed, watch, onBeforeUnmount, nextTick } from "vue";
+import { rafTwice } from "@/utils/raf.js";
 import {
   formatDate,
   formatDateTimeValue,
@@ -131,10 +132,8 @@ watch(
       wheelReady.value = false;
       initPicker(props.modelValue || formatDateTimeValue(new Date()));
       mounted.value = true;
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          active.value = true;
-        });
+      rafTwice(() => {
+        active.value = true;
       });
       await nextTick();
       pickerKey.value += 1;

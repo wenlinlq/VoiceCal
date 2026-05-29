@@ -9,7 +9,8 @@ const MOCK_EVENTS = [
     start_time: '2026-05-29 15:00:00',
     end_time: '2026-05-29 16:00:00',
     repeat_type: 'none',
-    note: '腾讯会议 123456'
+    note: '腾讯会议 123456',
+    completed: false
   },
   {
     id: 2,
@@ -17,7 +18,8 @@ const MOCK_EVENTS = [
     start_time: '2026-05-29 17:00:00',
     end_time: '2026-05-29 17:30:00',
     repeat_type: 'weekly',
-    note: ''
+    note: '',
+    completed: true
   },
   {
     id: 3,
@@ -25,7 +27,8 @@ const MOCK_EVENTS = [
     start_time: '2026-05-29 19:00:00',
     end_time: '2026-05-29 20:00:00',
     repeat_type: 'none',
-    note: '健身房 3楼'
+    note: '健身房 3楼',
+    completed: false
   },
   {
     id: 4,
@@ -33,7 +36,8 @@ const MOCK_EVENTS = [
     start_time: '2026-05-30 10:00:00',
     end_time: '2026-05-30 11:00:00',
     repeat_type: 'weekly',
-    note: ''
+    note: '',
+    completed: false
   },
   {
     id: 5,
@@ -41,7 +45,8 @@ const MOCK_EVENTS = [
     start_time: '2026-06-02 14:00:00',
     end_time: '2026-06-02 16:00:00',
     repeat_type: 'none',
-    note: '地址：科技园A座'
+    note: '地址：科技园A座',
+    completed: false
   },
   {
     id: 6,
@@ -49,7 +54,8 @@ const MOCK_EVENTS = [
     start_time: '2026-05-15 14:00:00',
     end_time: '2026-05-15 15:00:00',
     repeat_type: 'none',
-    note: ''
+    note: '',
+    completed: false
   }
 ]
 
@@ -104,6 +110,7 @@ export const useCalendarStore = defineStore('calendar', {
     async addEvent(event) {
       const newEvent = {
         id: Date.now(),
+        completed: false,
         ...event
       }
       this.events.push(newEvent)
@@ -112,6 +119,13 @@ export const useCalendarStore = defineStore('calendar', {
 
     async deleteEvent(id) {
       this.events = this.events.filter((e) => e.id !== id)
+    },
+
+    async toggleEventComplete(id) {
+      const event = this.events.find((e) => e.id === id)
+      if (event) {
+        event.completed = !event.completed
+      }
     },
 
     async updateEvent(event) {
