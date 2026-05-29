@@ -95,11 +95,12 @@ const showUserText = computed(() => {
     text-align: center;
     margin: 0;
     width: 100%;
-    max-width: 560rpx;
+    max-width: 100%;
     padding: 48rpx 40rpx;
     border-left: none;
     border-radius: 24rpx;
     box-shadow: 0 12rpx 48rpx rgba(0, 0, 0, 0.12);
+    box-sizing: border-box;
   }
 }
 

@@ -1,5 +1,5 @@
 <template>
-  <view class="page-settings">
+  <view class="page-settings" :style="pageBottomStyle">
     <view class="settings-group">
       <view class="settings-item" @tap="checkMicPermission">
         <view class="item-left">
@@ -26,14 +26,23 @@
       <view class="settings-item column">
         <view class="item-left">
           <view class="item-info">
+            <text class="item-title">API 服务器</text>
+            <text class="item-desc">{{ apiUrl }}</text>
+          </view>
+        </view>
+      </view>
+
+      <view class="settings-item column">
+        <view class="item-left">
+          <view class="item-info">
             <text class="item-title">WebSocket 服务器</text>
-            <text class="item-desc">开发环境后端地址</text>
+            <text class="item-desc">语音链路地址，可手动覆盖</text>
           </view>
         </view>
         <input
           class="ws-input"
           v-model="wsUrl"
-          placeholder="ws://localhost:8080/ws/voice"
+          placeholder="ws://218.244.137.52:8000/ws/voice"
           @blur="saveWsUrl"
         />
       </view>
@@ -75,10 +84,14 @@
 <script setup>
 import { ref } from 'vue'
 import { useWebSocketStore } from '@/store/modules/websocket.js'
+import { useMpSafeArea } from '@/composables/useMpSafeArea.js'
+import { API_BASE_URL } from '@/config/api.js'
 import GlobalVoice from '@/components/GlobalVoice/GlobalVoice.vue'
 
 const wsStore = useWebSocketStore()
+const { pageBottomStyle } = useMpSafeArea()
 const wsUrl = ref(wsStore.serverUrl)
+const apiUrl = API_BASE_URL
 const micStatusText = ref('点击检查权限')
 
 const guideItems = [
@@ -133,7 +146,7 @@ function clearCache() {
 }
 
 function saveWsUrl() {
-  wsStore.serverUrl = wsUrl.value
+  wsStore.setServerUrl(wsUrl.value)
   uni.showToast({ title: '地址已保存', icon: 'success' })
 }
 
@@ -151,7 +164,10 @@ function showGuide() {
   min-height: 100vh;
   background: #fff;
   padding: 24rpx;
+
+  /* #ifndef MP-WEIXIN */
   padding-bottom: calc(180rpx + env(safe-area-inset-bottom));
+  /* #endif */
 }
 
 .settings-group {

@@ -1,6 +1,6 @@
 <template>
-  <view class="page-year">
-    <view class="toolbar">
+  <view class="page-year" :style="pageBottomStyle">
+    <view class="nav-bar" :style="navRowStyle">
       <view class="toolbar-actions">
         <view class="icon-btn" @tap="goAdd">
           <view class="icon-plus" />
@@ -112,10 +112,12 @@ import { formatDate } from "@/utils/date.js";
 import { getLunarYearLabel } from "@/utils/lunar.js";
 import { raf } from "@/utils/raf.js";
 import { useCalendarStore } from "@/store/modules/calendar.js";
+import { useMpSafeArea } from "@/composables/useMpSafeArea.js";
 import MiniMonthCard from "@/components/MiniMonthCard/MiniMonthCard.vue";
 import GlobalVoice from "@/components/GlobalVoice/GlobalVoice.vue";
 
 const calendarStore = useCalendarStore();
+const { navRowStyle, pageBottomStyle } = useMpSafeArea();
 const viewYear = ref(new Date().getFullYear());
 const touchStartX = ref(0);
 const touchStartY = ref(0);

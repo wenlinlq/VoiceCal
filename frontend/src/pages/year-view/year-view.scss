@@ -3,19 +3,29 @@
   background: #fff;
   display: flex;
   flex-direction: column;
+
+  /* #ifndef MP-WEIXIN */
   padding-bottom: calc(180rpx + env(safe-area-inset-bottom));
+  /* #endif */
 }
 
-.toolbar {
+.nav-bar {
   display: flex;
-  justify-content: flex-end;
-  padding: calc(env(safe-area-inset-top) + 16rpx) 32rpx 8rpx;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 0 32rpx 8rpx;
+  box-sizing: border-box;
+
+  /* #ifndef MP-WEIXIN */
+  padding-top: calc(env(safe-area-inset-top) + 8rpx);
+  min-height: calc(env(safe-area-inset-top) + 80rpx);
+  /* #endif */
 }
 
 .toolbar-actions {
   display: flex;
   align-items: center;
-  gap: 32rpx;
+  gap: 24rpx;
 }
 
 .icon-btn {

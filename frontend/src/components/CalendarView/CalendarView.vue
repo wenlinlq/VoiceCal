@@ -1,6 +1,6 @@
 <template>
   <view class="calendar-view" :class="{ disabled }">
-    <view class="toolbar">
+    <view class="nav-bar" :style="navRowStyle">
       <view class="toolbar-actions">
         <view class="icon-btn" @tap.stop="emit('add')">
           <view class="icon-plus" />
@@ -77,7 +77,10 @@
 import { ref, computed, nextTick } from "vue";
 import { shiftMonth, getDaysOffsetLabel } from "@/utils/date.js";
 import { raf } from "@/utils/raf.js";
+import { useMpSafeArea } from "@/composables/useMpSafeArea.js";
 import CalendarMonthGrid from "@/components/CalendarMonthGrid/CalendarMonthGrid.vue";
+
+const { navRowStyle } = useMpSafeArea();
 
 const props = defineProps({
   events: { type: Array, default: () => [] },

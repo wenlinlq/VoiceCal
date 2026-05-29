@@ -4,14 +4,14 @@
       <view class="header-left">
         <text class="header-title">{{ headerTitle }}</text>
       </view>
-      <view class="header-more" @tap="$emit('more')">
+      <view v-if="showMore" class="header-more" @tap="$emit('more')">
         <text>更多</text>
         <text class="arrow">›</text>
       </view>
     </view>
 
     <EventItemsList
-      :events="events"
+      :events="displayEvents"
       :disabled="disabled"
       @item-click="onItemClick"
     />
@@ -27,6 +27,8 @@ const props = defineProps({
   events: { type: Array, default: () => [] },
   currentDate: { type: String, default: "" },
   disabled: { type: Boolean, default: false },
+  /** 最多展示条数，0 或不传表示不限制 */
+  limit: { type: Number, default: 0 },
 });
 
 const emit = defineEmits(["itemClick", "more"]);
@@ -38,6 +40,16 @@ const headerTitle = computed(() => {
   return props.currentDate === todayStr
     ? "今日事件"
     : `${formatDisplayDate(props.currentDate)} 事件`;
+});
+
+const displayEvents = computed(() => {
+  if (!props.limit || props.limit <= 0) return props.events;
+  return props.events.slice(0, props.limit);
+});
+
+const showMore = computed(() => {
+  if (!props.limit || props.limit <= 0) return true;
+  return props.events.length > props.limit;
 });
 
 function onItemClick(event) {

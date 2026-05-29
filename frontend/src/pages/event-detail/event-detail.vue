@@ -1,7 +1,7 @@
 <template>
   <view class="page-detail page-shell">
-    <view class="page-slide" :class="{ active: pageActive, leaving: pageLeaving }">
-      <view class="nav-bar">
+    <view class="page-slide" :class="{ active: pageActive, leaving: pageLeaving }" :style="pageBottomStyle">
+      <view class="nav-bar" :style="navBarStyle">
         <view class="nav-back" @tap="goBack">
           <text class="back-icon">‹</text>
           <text class="back-text">返回</text>
@@ -83,11 +83,13 @@ import { onLoad } from "@dcloudio/uni-app";
 import { useCalendarStore } from "@/store/modules/calendar.js";
 import { formatTime, formatDisplayDate, repeatTypeLabel } from "@/utils/date.js";
 import { usePageSlideNav } from "@/composables/usePageSlideNav.js";
+import { useMpSafeArea } from "@/composables/useMpSafeArea.js";
 import ConfirmDialog from "@/components/ConfirmDialog/ConfirmDialog.vue";
 import EventFormModal from "@/components/EventFormModal/EventFormModal.vue";
 import GlobalVoice from "@/components/GlobalVoice/GlobalVoice.vue";
 
 const calendarStore = useCalendarStore();
+const { navBarStyle, pageBottomStyle } = useMpSafeArea();
 const event = ref(null);
 const fromPage = ref("index");
 const fromDate = ref("");
@@ -120,9 +122,16 @@ const repeatLabel = computed(() => {
   return repeatTypeLabel(event.value.repeat_type);
 });
 
-onLoad((query) => {
+onLoad(async (query) => {
   if (query.id) {
     event.value = calendarStore.getEventById(query.id);
+    if (!event.value) {
+      try {
+        event.value = await calendarStore.fetchEventById(query.id);
+      } catch (_) {
+        event.value = null;
+      }
+    }
   }
   if (query.from) {
     fromPage.value = query.from;
@@ -141,23 +150,30 @@ function onEdit() {
 
 async function onSaveEdit(data) {
   if (!event.value) return;
-  await calendarStore.updateEvent({ id: event.value.id, ...data });
-  event.value = calendarStore.getEventById(event.value.id);
-  fromDate.value = event.value.start_time.slice(0, 10);
-  showEditForm.value = false;
-  uni.showToast({ title: "已保存", icon: "success" });
+  try {
+    await calendarStore.updateEvent({ id: event.value.id, ...data });
+    event.value = calendarStore.getEventById(event.value.id);
+    fromDate.value = event.value.start_time.slice(0, 10);
+    showEditForm.value = false;
+    uni.showToast({ title: "已保存", icon: "success" });
+  } catch (error) {
+    uni.showToast({ title: error.message || "保存失败", icon: "none" });
+  }
 }
 
 function onDelete() {
   showDeleteConfirm.value = true;
 }
 
-function confirmDelete() {
-  if (event.value) {
-    calendarStore.deleteEvent(event.value.id);
+async function confirmDelete() {
+  if (!event.value) return;
+  try {
+    await calendarStore.deleteEvent(event.value.id);
     showDeleteConfirm.value = false;
     uni.showToast({ title: "已删除", icon: "success" });
     setTimeout(() => goBack(), 1000);
+  } catch (error) {
+    uni.showToast({ title: error.message || "删除失败", icon: "none" });
   }
 }
 </script>
