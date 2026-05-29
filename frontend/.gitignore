@@ -1,0 +1,130 @@
+# 依赖目录
+node_modules/
+jspm_packages/
+
+# 编译生成的文件
+dist/
+dist-*/
+unpackage/
+unpackage/
+release/
+build/
+
+# 本地开发配置
+.env.local
+.env.*.local
+*.local
+
+# 日志文件
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# 编辑器配置
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# 操作系统文件
+Thumbs.db
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# 测试覆盖率
+coverage/
+.nyc_output/
+
+# 打包文件
+*.zip
+*.tar.gz
+*.rar
+
+# 临时文件
+.temp/
+.tmp/
+.cache/
+.temp_cache/
+
+# uni-app 特定
+unpackage/
+.hbuilderx/
+.project
+.classpath
+.settings/
+
+# 微信小程序
+.idea/
+miniprogram_npm/
+
+# 版本控制
+*.orig
+
+# 缓存文件
+.eslintcache
+.prettiercache
+.parcel-cache/
+
+# 环境变量
+.env
+.env.development
+.env.production
+.env.test
+
+# 生产环境构建文件
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# 类型定义文件
+*.tsbuildinfo
+
+# 微信开发者工具
+.idea/
+local.properties
+
+# HBuilderX
+/history/
+/sync/
+.manage*
+.hbuilderx
+
+# 音频临时文件
+*.mp3.tmp
+*.wav.tmp
+*.pcm.tmp
+
+# 上传文件目录
+uploads/
+temp/
+downloads/
+
+# 证书文件
+*.p12
+*.pem
+*.key
+*.crt
+
+# 调试文件
+*.log
+*.pid
+*.seed
+*.pid.lock
+
+# 性能分析文件
+profile.json
+heap-profile/
+cpu-profile/

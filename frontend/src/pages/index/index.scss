@@ -1,0 +1,67 @@
+.page-index {
+  min-height: 100vh;
+  background: #f5f7fa;
+  padding-bottom: calc(280rpx + env(safe-area-inset-bottom));
+}
+
+.top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16rpx 24rpx 0;
+}
+
+.ws-status {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  font-size: 22rpx;
+  color: #999;
+  background: #fff;
+  padding: 8rpx 16rpx;
+  border-radius: 20rpx;
+
+  &.connected {
+    color: #51cf66;
+
+    .status-dot {
+      background: #51cf66;
+    }
+  }
+}
+
+.status-dot {
+  width: 12rpx;
+  height: 12rpx;
+  border-radius: 50%;
+  background: #ccc;
+}
+
+.settings-btn {
+  width: 64rpx;
+  height: 64rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #fff;
+  border-radius: 50%;
+  font-size: 32rpx;
+  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.06);
+
+  &:active {
+    background: #f5f5f5;
+  }
+}
+
+.mic-area {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding-bottom: env(safe-area-inset-bottom);
+  pointer-events: none;
+
+  :deep(.floating-mic) {
+    pointer-events: auto;
+  }
+}
