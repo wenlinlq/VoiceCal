@@ -1,38 +1,40 @@
 <template>
-  <!-- 全局底部居中麦克风 -->
-  <view v-if="!showVoiceLayer" class="global-mic">
+  <!-- 底部麦克风：始终显示，会话中可再次点击终止 -->
+  <view class="global-mic" :class="{ 'in-session': inSession }">
     <RecordButton
       :status="voiceStore.status"
+      :in-session="inSession"
       position="bottom"
-      @start="onRecordStart"
-      @stop="onRecordStop"
+      @tap="onMicClick"
     />
   </view>
 
-  <!-- 语音交互遮罩层 -->
+  <!-- 会话中：遮罩 + 状态面板 -->
   <VoiceInteractionLayer
     :show="showVoiceLayer"
     :status="voiceStore.status"
-    :agent-state="agentState"
-    :asr-text="voiceStore.displayText"
-    :disabled="voiceStore.status === 'processing'"
-    @start="onRecordStart"
-    @stop="onRecordStop"
+    :reply-text="voiceStore.replyText"
+    :error-text="voiceStore.errorText"
+    :user-text="voiceStore.userText"
+    @close="closeVoiceSession"
   />
 </template>
 
 <script setup>
+import { computed } from 'vue'
 import { useVoiceInteraction } from '@/composables/useVoiceInteraction.js'
+import { VOICE_STATUS } from '@/store/modules/voice.js'
 import RecordButton from '@/components/RecordButton/RecordButton.vue'
 import VoiceInteractionLayer from '@/components/VoiceInteractionLayer/VoiceInteractionLayer.vue'
 
 const {
   voiceStore,
-  agentState,
   showVoiceLayer,
-  onRecordStart,
-  onRecordStop
+  onMicClick,
+  closeVoiceSession,
 } = useVoiceInteraction()
+
+const inSession = computed(() => voiceStore.status !== VOICE_STATUS.IDLE)
 </script>
 
 <style lang="scss" scoped>
@@ -43,5 +45,9 @@ const {
   transform: translateX(-50%);
   z-index: 400;
   pointer-events: auto;
+
+  &.in-session {
+    z-index: 510;
+  }
 }
 </style>

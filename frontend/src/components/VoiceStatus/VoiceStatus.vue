@@ -1,13 +1,13 @@
 <template>
   <view v-if="show" class="voice-status" :class="{ centered }">
     <view class="status-icon-wrap">
-      <view v-if="agentState === 'listening'" class="mini-wave">
+      <view v-if="isListening" class="mini-wave">
         <view class="bar" />
         <view class="bar" />
         <view class="bar" />
       </view>
-      <view v-if="agentState === 'thinking'" class="thinking-spinner" />
-      <view v-if="agentState === 'speaking'" class="speaking-bars">
+      <view v-if="status === 'thinking'" class="thinking-spinner" />
+      <view v-if="status === 'speaking'" class="speaking-bars">
         <view class="bar" />
         <view class="bar" />
         <view class="bar" />
@@ -15,7 +15,9 @@
     </view>
     <view class="status-text-wrap">
       <text class="status-label">{{ label }}</text>
-      <text v-if="asrText" class="asr-text">{{ asrText }}</text>
+      <text v-if="mainText" class="reply-text">{{ mainText }}</text>
+      <text v-if="hintText" class="hint-text">{{ hintText }}</text>
+      <text v-if="userText && showUserText" class="user-text">{{ userText }}</text>
     </view>
   </view>
 </template>
@@ -24,26 +26,54 @@
 import { computed } from 'vue'
 
 const props = defineProps({
-  agentState: {
+  status: {
     type: String,
-    default: 'listening',
-    validator: (v) => ['listening', 'thinking', 'speaking', 'waiting_confirm'].includes(v)
+    default: 'idle',
+    validator: (v) =>
+      ['idle', 'recording', 'thinking', 'speaking', 'auto_listening'].includes(v),
   },
-  asrText: { type: String, default: '' },
+  replyText: { type: String, default: '' },
+  errorText: { type: String, default: '' },
+  userText: { type: String, default: '' },
   visible: { type: Boolean, default: true },
-  centered: { type: Boolean, default: false }
+  centered: { type: Boolean, default: false },
 })
 
-const show = computed(() => props.visible && props.agentState !== 'idle')
+const show = computed(() => props.visible)
+
+const isListening = computed(
+  () => props.status === 'recording' || props.status === 'auto_listening',
+)
 
 const label = computed(() => {
+  if (props.errorText) return '提示'
   const map = {
-    listening: props.asrText ? '识别结果' : '识别中...',
+    recording: '聆听中...',
     thinking: '思考中...',
-    speaking: '播报中...',
-    waiting_confirm: '请确认'
+    speaking: '播报中',
+    auto_listening: '聆听中...',
   }
-  return map[props.agentState] || ''
+  return map[props.status] || ''
+})
+
+const mainText = computed(() => {
+  if (props.errorText) return props.errorText
+  if (props.status === 'speaking' && props.replyText) return props.replyText
+  return ''
+})
+
+const hintText = computed(() => {
+  if (props.status === 'auto_listening') {
+    return '请继续说话，或说「退出」结束'
+  }
+  if (props.status === 'recording') {
+    return '请说话...'
+  }
+  return ''
+})
+
+const showUserText = computed(() => {
+  return Boolean(props.userText) && props.status === 'speaking'
 })
 </script>
 
@@ -172,7 +202,7 @@ const label = computed(() => {
   }
 }
 
-.asr-text {
+.reply-text {
   font-size: 26rpx;
   color: #333;
   display: block;
@@ -185,6 +215,31 @@ const label = computed(() => {
     margin-top: 16rpx;
     color: #1a1a1a;
     font-weight: 500;
+  }
+}
+
+.hint-text {
+  font-size: 24rpx;
+  color: #999;
+  display: block;
+  margin-top: 12rpx;
+  line-height: 1.4;
+
+  .centered & {
+    font-size: 26rpx;
+  }
+}
+
+.user-text {
+  font-size: 24rpx;
+  color: #888;
+  display: block;
+  margin-top: 12rpx;
+  line-height: 1.4;
+  word-break: break-all;
+
+  .centered & {
+    font-size: 26rpx;
   }
 }
 </style>

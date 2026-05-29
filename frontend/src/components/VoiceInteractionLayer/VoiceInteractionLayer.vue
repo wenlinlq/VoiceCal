@@ -1,23 +1,15 @@
 <template>
   <view v-if="mounted" class="voice-layer" :class="{ active: active }">
-    <view class="voice-mask" />
+    <view class="voice-mask" @tap="onMaskTap" />
 
     <view class="voice-panel-wrap">
       <VoiceStatus
-        :agent-state="agentState"
-        :asr-text="asrText"
+        :status="status"
+        :reply-text="replyText"
+        :error-text="errorText"
+        :user-text="userText"
         :visible="true"
         centered
-      />
-    </view>
-
-    <view class="voice-mic-wrap">
-      <RecordButton
-        :status="status"
-        :disabled="disabled"
-        position="bottom"
-        @start="$emit('start')"
-        @stop="$emit('stop')"
       />
     </view>
   </view>
@@ -27,17 +19,16 @@
 import { ref, watch, onBeforeUnmount } from 'vue'
 import { rafTwice } from '@/utils/raf.js'
 import VoiceStatus from '@/components/VoiceStatus/VoiceStatus.vue'
-import RecordButton from '@/components/RecordButton/RecordButton.vue'
 
 const props = defineProps({
   show: { type: Boolean, default: false },
   status: { type: String, default: 'idle' },
-  agentState: { type: String, default: 'listening' },
-  asrText: { type: String, default: '' },
-  disabled: { type: Boolean, default: false }
+  replyText: { type: String, default: '' },
+  errorText: { type: String, default: '' },
+  userText: { type: String, default: '' },
 })
 
-defineEmits(['start', 'stop'])
+const emit = defineEmits(['close'])
 
 const mounted = ref(false)
 const active = ref(false)
@@ -62,8 +53,12 @@ watch(
       }, 380)
     }
   },
-  { immediate: true }
+  { immediate: true },
 )
+
+function onMaskTap() {
+  emit('close')
+}
 
 onBeforeUnmount(() => {
   if (hideTimer) clearTimeout(hideTimer)
@@ -118,15 +113,6 @@ onBeforeUnmount(() => {
 .voice-layer.active .voice-panel-wrap {
   opacity: 1;
   transform: translate(-50%, -50%) scale(1);
-  pointer-events: auto;
-}
-
-.voice-mic-wrap {
-  position: absolute;
-  left: 50%;
-  bottom: calc(40rpx + env(safe-area-inset-bottom));
-  transform: translateX(-50%);
-  z-index: 3;
   pointer-events: auto;
 }
 </style>

@@ -24,12 +24,13 @@
     pointer-events: none;
   }
 
-  &.status-recording {
+  &.status-recording,
+  &.status-auto_listening {
     background: #1565c0;
     box-shadow: 0 6rpx 24rpx rgba(21, 101, 192, 0.35);
   }
 
-  &.status-processing {
+  &.status-thinking {
     background: #1976d2;
     box-shadow: 0 6rpx 20rpx rgba(25, 118, 210, 0.3);
   }
@@ -37,6 +38,11 @@
   &.status-speaking {
     background: #1a73e8;
     box-shadow: 0 6rpx 20rpx rgba(26, 115, 232, 0.28);
+  }
+
+  &.in-session:not(.status-recording):not(.status-auto_listening) {
+    background: #1565c0;
+    box-shadow: 0 6rpx 24rpx rgba(21, 101, 192, 0.35);
   }
 
   &.pos-bottom {

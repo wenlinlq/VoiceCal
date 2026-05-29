@@ -1,20 +1,14 @@
 <template>
   <view
     class="record-btn"
-    :class="[`status-${status}`, `pos-${position}`, { disabled }]"
-    @touchstart.prevent="onTouchStart"
-    @touchend.prevent="onTouchEnd"
-    @touchcancel.prevent="onTouchEnd"
-    @mousedown.prevent="onTouchStart"
-    @mouseup.prevent="onTouchEnd"
-    @mouseleave.prevent="onTouchEnd"
+    :class="[`status-${status}`, `pos-${position}`, { 'in-session': inSession }]"
+    @tap.stop="onTap"
   >
-    <view v-if="status === 'recording'" class="wave-ring ring-1" />
-    <view v-if="status === 'recording'" class="wave-ring ring-2" />
-    <view v-if="status === 'recording'" class="wave-ring ring-3" />
+    <view v-if="isListening" class="wave-ring ring-1" />
+    <view v-if="isListening" class="wave-ring ring-2" />
+    <view v-if="isListening" class="wave-ring ring-3" />
 
     <view class="btn-inner">
-      <view v-if="status === 'processing'" class="loading-spinner" />
       <text class="btn-text">{{ statusText }}</text>
     </view>
   </view>
@@ -28,34 +22,25 @@ const props = defineProps({
     type: String,
     default: "idle",
     validator: (v) =>
-      ["idle", "recording", "processing", "speaking"].includes(v),
+      ["idle", "recording", "thinking", "speaking", "auto_listening"].includes(v),
   },
-  disabled: { type: Boolean, default: false },
+  inSession: { type: Boolean, default: false },
   position: { type: String, default: "bottom" },
 });
 
-const emit = defineEmits(["start", "stop"]);
+const emit = defineEmits(["tap"]);
+
+const isListening = computed(
+  () => props.status === "recording" || props.status === "auto_listening",
+);
 
 const statusText = computed(() => {
-  const map = {
-    idle: "长按说话",
-    recording: "松手结束",
-    processing: "处理中",
-    speaking: "播报中",
-  };
-  return map[props.status] || "长按说话";
+  if (props.inSession || props.status !== "idle") return "对话中";
+  return "点击说话";
 });
 
-function onTouchStart() {
-  if (props.disabled || props.status === "processing") return;
-  if (props.status === "idle") {
-    emit("start");
-  }
-}
-
-function onTouchEnd() {
-  if (props.disabled || props.status !== "recording") return;
-  emit("stop");
+function onTap() {
+  emit("tap");
 }
 </script>
 
