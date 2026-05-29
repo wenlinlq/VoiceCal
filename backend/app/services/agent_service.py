@@ -4,7 +4,7 @@ import json
 import logging
 import re
 from contextvars import ContextVar
-from typing import Any
+from typing import Any, Awaitable, Callable
 
 from agentscope.agent import ReActAgent
 from agentscope.formatter import DashScopeChatFormatter
@@ -339,7 +339,14 @@ class CalendarAgentService:
         logger.warning("[Agent] 兜底执行落库 tool=%s result=%s", tool_name, tool_result)
         return self._format_create_fallback_reply(tool_result, title, is_reminder)
 
-    async def handle_text(self, db, user_id: str, text: str, session_id: str = "") -> dict[str, Any]:
+    async def handle_text(
+        self,
+        db,
+        user_id: str,
+        text: str,
+        session_id: str = "",
+        on_speech_chunk: Callable[[bytes, bool], Awaitable[None]] | None = None,
+    ) -> dict[str, Any]:
         _db_ctx.set(db)
         _user_id_ctx.set(user_id)
         _session_id_ctx.set(session_id or "")
@@ -385,23 +392,85 @@ class CalendarAgentService:
             max_iters=8,
         )
 
-        speech_events: list[list[bytes]] = []  # 每次 post_print 一个事件
+        # WebSocket 服务端只需要把 TTS 音频分片转发给前端，不应在云端容器内尝试本地播放。
+        def _discard_local_audio_playback(msg_id: str, audio_block) -> None:
+            logger.debug("[Agent] 跳过服务端本地音频播放 msg_id=%s", msg_id)
+
+        agent._process_audio_block = _discard_local_audio_playback  # type: ignore[attr-defined]
+
+        speech_events: list[list[bytes]] = []  # 非流式路径下，每次 post_print 一个事件
+        streamed_speech = False
+        audio_prefix_by_msg: dict[str, list[str]] = {}
+
+        async def _stream_agent_audio(chunk: bytes, is_last: bool) -> None:
+            nonlocal streamed_speech
+            if on_speech_chunk is None:
+                return
+            await on_speech_chunk(chunk, is_last)
+            streamed_speech = True
+
+        def _extract_incremental_audio_chunks(msg_id: str, speech_blocks) -> list[bytes]:
+            blocks = speech_blocks if isinstance(speech_blocks, list) else [speech_blocks]
+            prefixes = audio_prefix_by_msg.setdefault(msg_id, [])
+            chunks: list[bytes] = []
+
+            for index, block in enumerate(blocks):
+                if not isinstance(block, dict) or "source" not in block:
+                    continue
+
+                source = block["source"] or {}
+                if source.get("type") != "base64":
+                    continue
+
+                data = source.get("data", "")
+                if not data:
+                    continue
+
+                while len(prefixes) <= index:
+                    prefixes.append("")
+
+                previous_data = prefixes[index]
+                if previous_data and data.startswith(previous_data):
+                    new_data = data[len(previous_data):]
+                elif data == previous_data:
+                    new_data = ""
+                else:
+                    logger.debug(
+                        "[Agent] 检测到音频流前缀重置 msg_id=%s block=%s old_len=%s new_len=%s",
+                        msg_id,
+                        index,
+                        len(previous_data),
+                        len(data),
+                    )
+                    new_data = data
+
+                prefixes[index] = data
+
+                if new_data:
+                    chunks.append(base64.b64decode(new_data))
+
+            return chunks
 
         async def _on_post_print(agent_obj, print_kwargs, output):
             speech = print_kwargs.get("speech") if isinstance(print_kwargs, dict) else None
             if speech:
-                blocks = speech if isinstance(speech, list) else [speech]
-                chunks: list[bytes] = []
-                for block in blocks:
-                    if isinstance(block, dict) and "source" in block:
-                        data = block["source"].get("data", "")
-                        if data:
-                            chunks.append(base64.b64decode(data))
+                msg = print_kwargs.get("msg") if isinstance(print_kwargs, dict) else None
+                msg_id = getattr(msg, "id", "") or "unknown"
+                chunks = _extract_incremental_audio_chunks(msg_id, speech)
                 if chunks:
-                    speech_events.append(chunks)
-                    # 只保留最后 3 次语音输出，丢弃更早的中间过程
-                    if len(speech_events) > 3:
-                        speech_events.pop(0)
+                    is_last_event = bool(print_kwargs.get("last")) if isinstance(print_kwargs, dict) else False
+                    if on_speech_chunk is not None:
+                        for index, chunk in enumerate(chunks):
+                            is_last_chunk = is_last_event and (index == len(chunks) - 1)
+                            await _stream_agent_audio(chunk, is_last_chunk)
+                    else:
+                        speech_events.append(chunks)
+                        # 只保留最后 3 次语音输出，丢弃更早的中间过程
+                        if len(speech_events) > 3:
+                            speech_events.pop(0)
+                elif on_speech_chunk is not None and bool(print_kwargs.get("last")):
+                    await on_speech_chunk(b"", True)
+                    streamed_speech = True
 
         hook_result = agent.register_instance_hook("post_print", "capture_speech", _on_post_print)
         if inspect.isawaitable(hook_result):
@@ -500,6 +569,7 @@ class CalendarAgentService:
 
         return {
             "reply_text": reply_text,
-            "speech": all_speech_chunks if all_speech_chunks else None,
+            "speech": None if streamed_speech else (all_speech_chunks if all_speech_chunks else None),
+            "speech_streamed": streamed_speech,
             "need_confirm": need_confirm,
         }

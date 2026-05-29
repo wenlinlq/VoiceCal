@@ -13,6 +13,7 @@
     服务端 → 客户端: transcription / agent.reply / tts.chunk / turn.done / error
 """
 
+import asyncio
 import base64
 import json
 import logging
@@ -30,6 +31,7 @@ from app.services.tts_service import get_tts_service
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["websocket"])
+PCM_STREAM_CHUNK_BYTES = 14400
 
 
 def _safe_text(text: str, max_len: int = 200) -> str:
@@ -234,8 +236,20 @@ async def _process_text(
     """
     async with get_session_factory()() as db:
         try:
+            async def _forward_streamed_speech(chunk: bytes, is_last: bool) -> None:
+                await _send_pcm_chunks_as_tts_messages(
+                    ws=ws,
+                    pcm_blocks=[chunk],
+                    session_id=session_id,
+                    final_is_last=is_last,
+                )
+
             result = await agent_service.handle_text(
-                db=db, user_id=user_id, session_id=session_id, text=text,
+                db=db,
+                user_id=user_id,
+                session_id=session_id,
+                text=text,
+                on_speech_chunk=_forward_streamed_speech,
             )
         except Exception as exc:
             logger.exception("[WebSocket] Agent 处理失败 session_id=%s", session_id)
@@ -247,6 +261,7 @@ async def _process_text(
 
     reply_text = result["reply_text"]
     speech = result.get("speech")
+    speech_streamed = result.get("speech_streamed", False)
     need_confirm = result.get("need_confirm", False)
 
     logger.info(
@@ -258,7 +273,9 @@ async def _process_text(
 
     await ws.send_json(AgentReply(text=reply_text, need_confirm=need_confirm).model_dump())
 
-    if speech is not None:
+    if speech_streamed:
+        logger.info("[WebSocket] Agent 原生 TTS 已实时推送 session_id=%s", session_id)
+    elif speech is not None:
         speech_size = sum(len(c) for c in speech)
         logger.info(
             "[WebSocket] 使用 Agent 原生 TTS 音频 session_id=%s 分片数=%s 总字节=%s",
@@ -266,13 +283,61 @@ async def _process_text(
             len(speech),
             speech_size,
         )
-        await _send_agent_speech_as_tts_chunk(ws, speech)
+        await _send_pcm_chunks_as_tts_messages(
+            ws=ws,
+            pcm_blocks=speech,
+            session_id=session_id,
+            final_is_last=True,
+        )
     else:
         logger.info("[WebSocket] Agent 未返回音频，启用 TTS 兜底 session_id=%s", session_id)
         await _send_standalone_tts_chunks(ws, tts, reply_text)
 
     logger.info("[WebSocket] 本轮处理完成 session_id=%s", session_id)
     await ws.send_json(TurnDone(success=True).model_dump())
+
+
+async def _send_pcm_chunks_as_tts_messages(
+    ws: WebSocket,
+    pcm_blocks,
+    session_id: str,
+    final_is_last: bool,
+):
+    """
+    将 PCM 音频块切分成多个 `tts.chunk` 消息并推送给前端。
+
+    Args:
+        ws: WebSocket 连接对象。
+        pcm_blocks: PCM 音频块集合。
+        session_id: 当前会话 ID。
+        final_is_last: 当前这批 PCM 是否代表整段音频的最后一批。
+    """
+    audio_blocks = pcm_blocks if isinstance(pcm_blocks, list) else [pcm_blocks]
+    pcm_chunks: list[bytes] = []
+    for block in audio_blocks:
+        audio_bytes = block if isinstance(block, bytes) else bytes(block)
+        if not audio_bytes:
+            continue
+        for start in range(0, len(audio_bytes), PCM_STREAM_CHUNK_BYTES):
+            pcm_chunks.append(audio_bytes[start:start + PCM_STREAM_CHUNK_BYTES])
+
+    if not pcm_chunks:
+        pcm_chunks.append(b"")
+
+    total = len(pcm_chunks)
+    for i, chunk in enumerate(pcm_chunks):
+        is_last = final_is_last and (i == total - 1)
+        encoded = base64.b64encode(chunk).decode()
+        logger.debug(
+            "[WebSocket] 发送 TTS 分片 session_id=%s 序号=%s/%s 大小=%s字节 是否结束=%s",
+            session_id,
+            i + 1,
+            total,
+            len(chunk),
+            is_last,
+        )
+        await ws.send_json(TTSChunkMessage(data=encoded, is_last=is_last).model_dump())
+        await asyncio.sleep(0)
 
 
 async def _send_agent_speech_as_tts_chunk(ws: WebSocket, speech):
@@ -287,24 +352,13 @@ async def _send_agent_speech_as_tts_chunk(ws: WebSocket, speech):
         speech: AgentScope 捕获的音频数据（list[bytes]）。
     """
     try:
-        audio_blocks = speech if isinstance(speech, list) else [speech]
-        total = len(audio_blocks)
-        for i, block in enumerate(audio_blocks):
-            is_last = (i == total - 1)
-            audio_bytes = block if isinstance(block, bytes) else bytes(block)
-            encoded = base64.b64encode(audio_bytes).decode()
-            logger.debug(
-                "[WebSocket] 发送 TTS 分片 session_id=%s 序号=%s/%s 大小=%s字节 是否结束=%s",
-                "agent",
-                i + 1,
-                total,
-                len(audio_bytes),
-                is_last,
-            )
-            await ws.send_json(
-                TTSChunkMessage(data=encoded, is_last=is_last).model_dump()
-            )
-        logger.info("[WebSocket] TTS 音频推送完成 分片数=%s", total)
+        await _send_pcm_chunks_as_tts_messages(
+            ws=ws,
+            pcm_blocks=speech,
+            session_id="agent",
+            final_is_last=True,
+        )
+        logger.info("[WebSocket] TTS 音频推送完成 分片数=%s", len(speech) if isinstance(speech, list) else 1)
     except Exception:
         logger.exception("[WebSocket] 推送 Agent TTS 音频失败")
 
