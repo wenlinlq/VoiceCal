@@ -25,10 +25,6 @@ defineEmits(['start', 'stop'])
 
 <style lang="scss" scoped>
 .floating-mic {
-  position: fixed;
-  right: 48rpx;
-  bottom: calc(48rpx + env(safe-area-inset-bottom));
-  z-index: 100;
   display: flex;
   align-items: center;
   justify-content: center;

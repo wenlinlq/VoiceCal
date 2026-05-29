@@ -1,69 +1,40 @@
-.event-list {
-  background: #fff;
-  margin: 0 32rpx 24rpx;
-  padding: 24rpx 0;
-  border-top: 1rpx solid #f0f0f0;
-}
+@import "@/styles/page-nav.scss";
 
-.list-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 20rpx;
-}
-
-.header-left {
-  display: flex;
-  align-items: center;
-  gap: 8rpx;
-}
-
-.header-title {
-  font-size: 30rpx;
-  font-weight: 600;
-  color: #333;
-}
-
-.header-more {
-  display: flex;
-  align-items: center;
-  font-size: 26rpx;
-  color: #1a73e8;
-
-  .arrow {
-    margin-left: 4rpx;
-    font-size: 28rpx;
-  }
+.event-scroll {
+  flex: 1;
+  height: 0;
+  padding: 24rpx 32rpx;
+  box-sizing: border-box;
 }
 
 .empty-state {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 48rpx 0;
+  padding: 160rpx 0;
 }
 
 .empty-text {
-  font-size: 28rpx;
+  font-size: 30rpx;
   color: #999;
-  margin-bottom: 8rpx;
+  margin-bottom: 12rpx;
 }
 
 .empty-hint {
-  font-size: 24rpx;
+  font-size: 26rpx;
   color: #bbb;
 }
 
 .list-body {
   display: flex;
   flex-direction: column;
-  gap: 16rpx;
+  gap: 20rpx;
 }
 
 .event-item {
   display: flex;
   align-items: center;
-  padding: 20rpx;
+  padding: 24rpx;
   background: #f5f9ff;
   border-radius: 16rpx;
   border-left: 6rpx solid #1a73e8;
@@ -79,14 +50,14 @@
 }
 
 .time-text {
-  font-size: 26rpx;
+  font-size: 28rpx;
   color: #1a73e8;
   font-weight: 500;
   display: block;
 }
 
 .time-end {
-  font-size: 22rpx;
+  font-size: 24rpx;
   color: #aaa;
   display: block;
   margin-top: 4rpx;
@@ -98,20 +69,27 @@
 }
 
 .event-title {
-  font-size: 28rpx;
+  font-size: 30rpx;
   color: #333;
   font-weight: 500;
+  display: block;
+}
+
+.repeat-badge {
+  font-size: 24rpx;
+  color: #999;
+  margin-top: 6rpx;
+  display: block;
+}
+
+.event-note {
+  font-size: 24rpx;
+  color: #888;
+  margin-top: 6rpx;
   display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.repeat-badge {
-  font-size: 22rpx;
-  color: #999;
-  margin-top: 4rpx;
-  display: block;
 }
 
 .item-arrow {

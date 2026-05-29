@@ -9,11 +9,35 @@
       }
     },
     {
+      "path": "pages/year-view/year-view",
+      "style": {
+        "navigationStyle": "custom",
+        "navigationBarTitleText": "年视图",
+        "backgroundColor": "#ffffff"
+      }
+    },
+    {
+      "path": "pages/day-events/day-events",
+      "style": {
+        "navigationStyle": "custom",
+        "navigationBarTitleText": "今日事件",
+        "backgroundColor": "#ffffff",
+        "app-plus": {
+          "animationType": "slide-in-right",
+          "animationDuration": 320
+        }
+      }
+    },
+    {
       "path": "pages/event-detail/event-detail",
       "style": {
+        "navigationStyle": "custom",
         "navigationBarTitleText": "事件详情",
-        "navigationBarBackgroundColor": "#ffffff",
-        "navigationBarTextStyle": "black"
+        "backgroundColor": "#ffffff",
+        "app-plus": {
+          "animationType": "slide-in-right",
+          "animationDuration": 320
+        }
       }
     },
     {
