@@ -5,21 +5,21 @@ export const useWebSocketStore = defineStore('websocket', {
     connected: false,
     reconnecting: false,
     reconnectCount: 0,
-    serverUrl: 'ws://localhost:8080/ws/voice'
+    serverUrl: 'ws://localhost:8000/ws/voice',
   }),
 
   actions: {
     connect() {
-      // 静态阶段：模拟连接
       this.connected = true
+      return Promise.resolve()
     },
 
     disconnect() {
       this.connected = false
     },
 
-    sendAudio() {},
+    send() {},
 
-    sendControl() {}
-  }
+    sendControl() {},
+  },
 })
