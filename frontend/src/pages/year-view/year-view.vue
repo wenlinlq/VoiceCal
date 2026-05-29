@@ -110,6 +110,7 @@ import { ref, computed, nextTick } from "vue";
 import { onLoad } from "@dcloudio/uni-app";
 import { formatDate } from "@/utils/date.js";
 import { getLunarYearLabel } from "@/utils/lunar.js";
+import { raf } from "@/utils/raf.js";
 import { useCalendarStore } from "@/store/modules/calendar.js";
 import MiniMonthCard from "@/components/MiniMonthCard/MiniMonthCard.vue";
 import GlobalVoice from "@/components/GlobalVoice/GlobalVoice.vue";
@@ -160,7 +161,7 @@ function animateYearChange(delta) {
   };
 
   nextTick(() => {
-    requestAnimationFrame(() => {
+    raf(() => {
       yearSlide.value.run = true;
     });
   });

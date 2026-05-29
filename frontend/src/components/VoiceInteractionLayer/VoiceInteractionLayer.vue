@@ -25,6 +25,7 @@
 
 <script setup>
 import { ref, watch, onBeforeUnmount } from 'vue'
+import { rafTwice } from '@/utils/raf.js'
 import VoiceStatus from '@/components/VoiceStatus/VoiceStatus.vue'
 import RecordButton from '@/components/RecordButton/RecordButton.vue'
 
@@ -51,10 +52,8 @@ watch(
     }
     if (val) {
       mounted.value = true
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          active.value = true
-        })
+      rafTwice(() => {
+        active.value = true
       })
     } else {
       active.value = false

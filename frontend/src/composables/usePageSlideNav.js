@@ -1,5 +1,6 @@
 import { ref } from "vue";
 import { onShow, onBackPress } from "@dcloudio/uni-app";
+import { rafTwice } from "@/utils/raf.js";
 
 const ANIM_DURATION = 320;
 
@@ -15,11 +16,9 @@ export function usePageSlideNav(options = {}) {
   let allowNavigateBack = false;
 
   function playEnter() {
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        pageActive.value = true;
-        hasEntered = true;
-      });
+    rafTwice(() => {
+      pageActive.value = true;
+      hasEntered = true;
     });
   }
 

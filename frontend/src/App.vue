@@ -1,23 +1,42 @@
 <script setup>
-import { onLaunch, onShow, onHide } from '@dcloudio/uni-app'
+import { onLaunch, onShow, onHide } from "@dcloudio/uni-app";
+import { useUserStore } from "@/store/modules/user.js";
+import { isMpWeixin } from "@/utils/wechat-login.js";
 
-onLaunch(() => {
-  console.log('语音日历 App Launch')
-})
+onLaunch(async () => {
+  console.log("语音日历 App Launch");
+
+  if (!isMpWeixin()) {
+    console.log("[微信静默登录] 非微信小程序环境，跳过");
+    return;
+  }
+
+  const userStore = useUserStore();
+  userStore.restoreFromCache();
+
+  try {
+    const loginInfo = await userStore.silentLogin();
+    console.log("[微信静默登录] 登录成功，用户信息：", loginInfo);
+  } catch (error) {
+    userStore.setLoginError(error?.message || String(error));
+    console.error("[微信静默登录] 登录失败：", error);
+  }
+});
 
 onShow(() => {
-  console.log('App Show')
-})
+  console.log("App Show");
+});
 
 onHide(() => {
-  console.log('App Hide')
-})
+  console.log("App Hide");
+});
 </script>
 
 <style lang="scss">
 page {
   background-color: #ffffff;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
   color: #333;
   box-sizing: border-box;
 }
