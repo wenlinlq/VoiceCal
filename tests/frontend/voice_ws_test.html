@@ -1,0 +1,773 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>声历 Agent — WebSocket 语音链路测试</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, sans-serif; background: #1a1a2e; color: #e0e0e0; padding: 16px; }
+h1 { font-size: 18px; margin-bottom: 12px; color: #7ec8e3; }
+.row { display: flex; gap: 12px; flex-wrap: wrap; }
+.col { flex: 1; min-width: 300px; }
+.card { background: #16213e; border-radius: 8px; padding: 14px; margin-bottom: 12px; }
+.card h2 { font-size: 14px; color: #e94560; margin-bottom: 8px; }
+input, button, select { padding: 6px 10px; border-radius: 4px; border: 1px solid #333; font-size: 13px; }
+input { background: #0f3460; color: #e0e0e0; width: 100%; margin-bottom: 6px; }
+button { cursor: pointer; background: #e94560; color: #fff; border: none; margin: 3px; }
+button:hover { background: #ff6b81; }
+button:disabled { background: #555; cursor: not-allowed; }
+button.green { background: #2ecc71; }
+button.green:hover { background: #3ddb84; }
+button.blue { background: #3498db; }
+button.blue:hover { background: #5dade2; }
+#log { background: #0a0a1a; border-radius: 4px; padding: 8px; height: 300px; overflow-y: auto; font-family: monospace; font-size: 11px; line-height: 1.5; }
+#log .time { color: #666; }
+#log .in { color: #2ecc71; }
+#log .out { color: #3498db; }
+#log .error { color: #e74c3c; }
+#log .tts { color: #f39c12; }
+#asr-realtime { color: #888; font-style: italic; min-height: 20px; }
+#asr-final { color: #fff; font-weight: bold; min-height: 20px; }
+#result { color: #2ecc71; min-height: 20px; }
+#confirm-box { display: none; background: #e9456022; border: 1px solid #e94560; border-radius: 4px; padding: 8px; margin-top: 6px; }
+#tts-status { color: #f39c12; font-size: 12px; }
+.badge { display: inline-block; padding: 2px 6px; border-radius: 3px; font-size: 11px; }
+.badge-ok { background: #2ecc7122; color: #2ecc71; }
+.badge-err { background: #e74c3c22; color: #e74c3c; }
+</style>
+</head>
+<body>
+
+<!--
+  声历 Agent — WebSocket 语音链路测试页
+  ========================================
+  适配当前后端实际协议（2026-05-29）：
+
+  客户端 → 服务端 (JSON 文本消息):
+    {"type":"text.message", "session_id":"...", "text":"..."}
+    {"type":"audio_start", "session_id":"...", "format":"pcm", "sampleRate":48000}
+    {"type":"audio.chunk", "session_id":"...", "data":"<base64 PCM>"}
+    {"type":"audio_end", "session_id":"...", "sample_rate":48000}
+
+  服务端 → 客户端 (JSON 文本消息):
+    {"type":"transcription", "text":"..."}
+    {"type":"agent.reply", "text":"...", "intent":"...", "slots":{...}, "need_confirm":false}
+    {"type":"tts.chunk", "data":"<base64 PCM>", "is_last":false}
+    {"type":"turn.done", "success":true}
+    {"type":"error", "message":"..."}
+
+  注意：当前后端是纯 JSON 协议，无 4 字节 binary header。
+  need_confirm / status / asr partial 暂未实现。
+  TTS 输出 PCM (24kHz 16bit mono)，通过 Web Audio API 播放。
+
+  运行方式：
+    open tests/frontend/voice_ws_test.html
+    # 或
+    python3 -m http.server 5500
+    → http://localhost:5500/tests/frontend/voice_ws_test.html
+-->
+
+<h1>声历 Agent — WebSocket 语音链路测试</h1>
+
+<div class="row">
+<div class="col">
+  <!-- 连接 -->
+  <div class="card">
+    <h2>连接</h2>
+    <input id="wsUrl" value="ws://localhost:8000/ws/voice">
+    <div>
+      <button id="btnConnect" onclick="connect()" class="green">连接</button>
+      <button id="btnDisconnect" onclick="disconnect()" disabled>断开</button>
+      <span id="connStatus" class="badge badge-err">未连接</span>
+    </div>
+  </div>
+
+  <!-- 文本输入 -->
+  <div class="card">
+    <h2>文本消息 (text.message)</h2>
+    <input id="textInput" placeholder="输入文本指令，如：明天下午三点提醒我开组会">
+    <button onclick="sendText()">发送文本</button>
+  </div>
+
+  <!-- 音频：麦克风 -->
+  <div class="card">
+    <h2>麦克风录音</h2>
+    <div>
+      <button id="btnRecord" onclick="startSpeaking()" class="green">开始说话</button>
+      <button id="btnStop" onclick="stopSpeaking()" disabled>停止说话</button>
+      <span id="recordStatus"></span>
+    </div>
+    <div style="font-size:11px;color:#888;margin-top:4px">
+      点击一次“开始说话”即可自动连接 WebSocket、申请麦克风并开始发送音频
+    </div>
+  </div>
+
+  <!-- 音频：文件上传 -->
+  <div class="card">
+    <h2>上传 PCM 文件</h2>
+    <input type="file" id="pcmFile" accept=".pcm,.wav,.raw">
+    <button onclick="sendPcmFile()">发送音频文件</button>
+    <div style="font-size:11px;color:#888;margin-top:4px">
+      自动切为 32000 bytes/chunk (~1秒), 转 base64 发送 audio_start → audio.chunk → audio_end
+    </div>
+  </div>
+
+  <!-- REST API -->
+  <div class="card">
+    <h2>REST API 日程 CRUD</h2>
+    <div style="font-size:11px;color:#888;margin-bottom:6px">直接调用 /api/events，不走 agent 链路</div>
+
+    <div style="margin-bottom:4px">
+      <button onclick="eventsList()" class="blue">GET 列表</button>
+      <input id="evtStart" placeholder="开始时间 ISO" style="width:140px" value="2026-05-29T00:00:00">
+      <input id="evtEnd" placeholder="结束时间 ISO" style="width:140px" value="2026-05-30T23:59:59">
+    </div>
+
+    <div style="margin-bottom:4px">
+      <button onclick="eventsCreate()" class="green">POST 创建</button>
+      <input id="evtTitle" placeholder="标题" style="width:100px" value="项目会议">
+      <input id="evtStart2" placeholder="开始 ISO" style="width:140px" value="2026-05-30T15:00:00">
+      <input id="evtEnd2" placeholder="结束 ISO" style="width:140px" value="2026-05-30T16:00:00">
+    </div>
+
+    <div style="margin-bottom:4px">
+      <button onclick="eventsGet()" class="blue">GET 单个</button>
+      <button onclick="eventsUpdate()">PUT 修改</button>
+      <button onclick="eventsDelete()" style="background:#c0392b">DELETE 删除</button>
+      <input id="evtId" placeholder="event_id" style="width:260px">
+    </div>
+
+    <div style="margin-bottom:4px">
+      <span id="restResult" style="font-size:12px;color:#2ecc71"></span>
+    </div>
+  </div>
+</div>
+
+<div class="col">
+  <!-- ASR -->
+  <div class="card">
+    <h2>ASR / 转录</h2>
+    <div>实时: <span id="asr-realtime">-</span></div>
+    <div>最终: <span id="asr-final">-</span></div>
+  </div>
+
+  <!-- Agent Reply -->
+  <div class="card">
+    <h2>Agent 回复</h2>
+    <div id="result">-</div>
+  </div>
+
+  <!-- TTS -->
+  <div class="card">
+    <h2>TTS / 播放</h2>
+    <div id="tts-status">-</div>
+    <button id="btnPlayAll" onclick="playAllTts()" class="blue" disabled>播放本轮语音</button>
+  </div>
+
+  <!-- Confirm -->
+  <div class="card" id="confirm-box">
+    <h2>确认操作</h2>
+    <div id="confirm-msg"></div>
+    <button onclick="sendConfirm()" class="green">确认</button>
+    <button onclick="sendCancel()">取消</button>
+  </div>
+
+  <!-- 日志 -->
+  <div class="card">
+    <h2>消息日志</h2>
+    <div id="log"></div>
+    <button onclick="clearLog()">清空</button>
+  </div>
+</div>
+</div>
+
+<script>
+// ============================================================
+// State
+// ============================================================
+let ws = null;
+let sessionId = 'test_' + Date.now();
+let mediaStream = null;
+let audioCtx = null;
+let scriptProcessor = null;
+let recording = false;
+let currentSampleRate = 44100;  // 实际采样率，录音后更新
+let ttsChunks = [];  // {seq, data:Uint8Array}
+let ttsSampleRate = 24000;
+let connectPromise = null;
+
+const wsUrlInput = document.getElementById('wsUrl');
+const btnConnect = document.getElementById('btnConnect');
+const btnDisconnect = document.getElementById('btnDisconnect');
+const btnRecord = document.getElementById('btnRecord');
+const btnStop = document.getElementById('btnStop');
+const connStatus = document.getElementById('connStatus');
+const recordStatus = document.getElementById('recordStatus');
+
+// ============================================================
+// WebSocket
+// ============================================================
+function connect() {
+  ensureWebSocketConnected().catch((error) => {
+    log('手动连接失败：' + error.message, 'error');
+    updateStatus('连接失败：' + error.message);
+  });
+}
+
+function disconnect() {
+  if (ws) {
+    ws.close();
+    ws = null;
+  }
+  connectPromise = null;
+}
+
+function updateConnectionStatus(connected) {
+  connStatus.innerHTML = connected
+    ? '<span class="badge badge-ok">已连接</span>'
+    : '<span class="badge badge-err">未连接</span>';
+  btnConnect.disabled = connected;
+  btnDisconnect.disabled = !connected;
+}
+
+function updateStatus(text) {
+  recordStatus.textContent = text;
+}
+
+function attachWebSocketHandlers(socket) {
+  socket.onopen = () => {
+    log('WebSocket 连接成功', 'in');
+    updateConnectionStatus(true);
+    updateStatus('WebSocket 已连接');
+  };
+
+  socket.onmessage = async (event) => {
+    let raw = event.data;
+    if (raw instanceof Blob) {
+      raw = await raw.text();
+    }
+    try {
+      const msg = JSON.parse(raw);
+      try {
+        handleMessage(msg);
+      } catch (e) {
+        log('处理消息异常: ' + (e && e.message ? e.message : String(e)), 'error');
+        console.error('handleMessage error', e, msg);
+      }
+    } catch (e) {
+      log('收到非 JSON 消息, size=' + ((event.data && event.data.length) || event.data.byteLength || 0), 'out');
+    }
+  };
+
+  socket.onerror = () => {
+    log('WebSocket 连接错误', 'error');
+  };
+
+  socket.onclose = () => {
+    log('WebSocket 已关闭', 'error');
+    updateConnectionStatus(false);
+    updateStatus('WebSocket 已关闭');
+    connectPromise = null;
+    if (recording) {
+      resetRecordingState();
+    }
+  };
+}
+
+function ensureWebSocketConnected() {
+  log('自动检查 WebSocket 状态', 'out');
+
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    log('WebSocket 已经连接，直接复用', 'in');
+    updateConnectionStatus(true);
+    return Promise.resolve();
+  }
+
+  if (ws && ws.readyState === WebSocket.CONNECTING && connectPromise) {
+    log('WebSocket 正在连接中，等待连接完成', 'out');
+    return connectPromise;
+  }
+
+  const url = wsUrlInput.value.trim();
+  if (!url) {
+    return Promise.reject(new Error('请输入 WebSocket 地址'));
+  }
+
+  log('WebSocket 未连接，开始自动连接：' + url, 'out');
+  updateConnectionStatus(false);
+
+  ws = new WebSocket(url);
+  attachWebSocketHandlers(ws);
+
+  connectPromise = new Promise((resolve, reject) => {
+    ws.addEventListener('open', () => {
+      connectPromise = null;
+      resolve();
+    }, { once: true });
+
+    ws.addEventListener('error', () => {
+      connectPromise = null;
+      reject(new Error('WebSocket 连接错误'));
+    }, { once: true });
+
+    ws.addEventListener('close', () => {
+      if (ws && ws.readyState !== WebSocket.OPEN) {
+        connectPromise = null;
+      }
+    }, { once: true });
+  });
+
+  return connectPromise;
+}
+
+function sendJson(obj) {
+  if (!ws || ws.readyState !== WebSocket.OPEN) {
+    log('WebSocket 未连接', 'error');
+    return;
+  }
+  const json = JSON.stringify(obj);
+  ws.send(json);
+  log('发送: ' + json.slice(0, 200), 'out');
+}
+
+// ============================================================
+// Text message
+// ============================================================
+function sendText() {
+  const text = document.getElementById('textInput').value.trim();
+  if (!text) { log('请输入文本', 'error'); return; }
+  sendJson({ type: 'text.message', session_id: sessionId, text: text });
+}
+
+// ============================================================
+// Audio: Microphone → PCM → base64 → audio.chunk
+// ============================================================
+async function startSpeaking() {
+  btnRecord.disabled = true;
+  btnStop.disabled = true;
+
+  try {
+    log('点击开始说话', 'out');
+    updateStatus('正在连接 WebSocket...');
+
+    await ensureWebSocketConnected();
+
+    log('WebSocket 已连接，准备申请麦克风权限', 'in');
+    updateStatus('正在申请麦克风权限...');
+
+    await startRecording();
+  } catch (error) {
+    log('开始说话失败：' + error.message, 'error');
+    updateStatus('开始失败：' + error.message);
+    btnRecord.disabled = false;
+    btnStop.disabled = true;
+  }
+}
+
+async function startRecording() {
+  try {
+    mediaStream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        sampleRate: 16000,
+        channelCount: 1,
+        echoCancellation: true,
+        noiseSuppression: true,
+      }
+    });
+  } catch (e) {
+    log('麦克风权限被拒绝: ' + e.message, 'error');
+    throw new Error('麦克风权限申请失败');
+  }
+
+  log('麦克风权限申请成功', 'in');
+
+  // 不指定 sampleRate，由浏览器使用默认值（通常 44.1kHz 或 48kHz）
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  currentSampleRate = audioCtx.sampleRate;
+  log('AudioContext 实际采样率: ' + currentSampleRate + 'Hz', 'in');
+  const source = audioCtx.createMediaStreamSource(mediaStream);
+
+  // ScriptProcessorNode: 每 4096 samples 回调
+  scriptProcessor = audioCtx.createScriptProcessor(4096, 1, 1);
+
+  scriptProcessor.onaudioprocess = (event) => {
+    if (!recording) return;
+    const input = event.inputBuffer.getChannelData(0);
+    // float32 [-1,1] → int16
+    const int16 = new Int16Array(input.length);
+    for (let i = 0; i < input.length; i++) {
+      int16[i] = Math.max(-32768, Math.min(32767, Math.round(input[i] * 32767)));
+    }
+    const pcm = new Uint8Array(int16.buffer);
+    const base64 = btoa(String.fromCharCode(...pcm));
+    log('音频 chunk 大小=' + pcm.byteLength + 'B', 'out');
+    sendJson({ type: 'audio.chunk', session_id: sessionId, data: base64 });
+  };
+
+  source.connect(scriptProcessor);
+  scriptProcessor.connect(audioCtx.destination);
+
+  recording = true;
+  btnRecord.disabled = true;
+  btnStop.disabled = false;
+  updateStatus('● 录音中');
+  log('开始录音', 'in');
+
+  sendJson({
+    type: 'audio_start',
+    session_id: sessionId,
+    format: 'pcm',
+    sampleRate: currentSampleRate,
+  });
+  log('发送 audio_start', 'out');
+}
+
+function resetRecordingState() {
+  recording = false;
+
+  if (scriptProcessor) {
+    scriptProcessor.disconnect();
+    scriptProcessor = null;
+  }
+  if (mediaStream) {
+    mediaStream.getTracks().forEach(t => t.stop());
+    mediaStream = null;
+  }
+  if (audioCtx) {
+    audioCtx.close();
+    audioCtx = null;
+  }
+
+  btnRecord.disabled = false;
+  btnStop.disabled = true;
+}
+
+function stopSpeaking() {
+  if (!recording) {
+    updateStatus('');
+    btnRecord.disabled = false;
+    btnStop.disabled = true;
+    return;
+  }
+
+  log('停止录音', 'in');
+  resetRecordingState();
+
+  sendJson({ type: 'audio_end', session_id: sessionId, sample_rate: currentSampleRate });
+  log('发送 audio_end', 'out');
+  updateStatus('');
+}
+
+// ============================================================
+// Audio: File upload → audio_start → chunks → audio_end
+// ============================================================
+function sendPcmFile() {
+  const fileInput = document.getElementById('pcmFile');
+  const file = fileInput.files[0];
+  if (!file) { log('请选择文件', 'error'); return; }
+
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const bytes = new Uint8Array(e.target.result);
+    const chunkSize = 32000; // ~1 second at 16kHz/16bit/mono
+    let offset = 0;
+    let seq = 0;
+
+    sendJson({
+      type: 'audio_start',
+      session_id: sessionId,
+      format: 'pcm',
+      sampleRate: 16000,
+    });
+
+    while (offset < bytes.length) {
+      const chunk = bytes.slice(offset, offset + chunkSize);
+      const base64 = btoa(String.fromCharCode(...chunk));
+      sendJson({ type: 'audio.chunk', session_id: sessionId, data: base64 });
+      offset += chunkSize;
+      seq++;
+    }
+    sendJson({ type: 'audio_end', session_id: sessionId, sample_rate: 16000 });
+    log(`文件已分 ${seq} 片发送`, 'out');
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+// ============================================================
+// Confirm
+// ============================================================
+function sendConfirm() {
+  sendJson({ type: 'text.message', session_id: sessionId, text: '确认' });
+  document.getElementById('confirm-box').style.display = 'none';
+}
+function sendCancel() {
+  sendJson({ type: 'text.message', session_id: sessionId, text: '取消' });
+  document.getElementById('confirm-box').style.display = 'none';
+}
+
+// ============================================================
+// Handle server messages
+// ============================================================
+function handleMessage(msg) {
+  const t = msg.type;
+
+  if (t === 'transcription') {
+    document.getElementById('asr-realtime').textContent = msg.text;
+    document.getElementById('asr-final').textContent = msg.text;
+    log('收到 asr_result: ' + msg.text, 'in');
+  }
+  else if (t === 'agent.reply') {
+    document.getElementById('result').textContent = msg.text;
+    log('收到 agent_response: ' + msg.text.slice(0, 120) + ' need_confirm=' + (msg.need_confirm || false), 'in');
+
+    // 后端标记 need_confirm=true 时弹出确认卡片
+    if (msg.need_confirm) {
+      document.getElementById('confirm-msg').textContent = msg.text;
+      document.getElementById('confirm-box').style.display = 'block';
+      log('need_confirm=true，自动弹出确认卡片', 'in');
+    } else {
+      document.getElementById('confirm-box').style.display = 'none';
+    }
+  }
+  else if (t === 'tts.chunk') {
+    // Decode base64 PCM → Uint8Array
+    const binary = atob(msg.data);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    ttsChunks.push(bytes);
+
+    const total = ttsChunks.reduce((s, c) => s + c.length, 0);
+    document.getElementById('tts-status').textContent =
+      `收到 chunk #${ttsChunks.length}, pcm=${bytes.length}B, 累计=${total}B` + (msg.is_last ? ' (最后)' : '');
+
+    log(`收到 tts_audio: ${bytes.length}B${msg.is_last ? ' last' : ''}`, 'tts');
+
+    if (msg.is_last) {
+      document.getElementById('btnPlayAll').disabled = false;
+    }
+  }
+  else if (t === 'turn.done') {
+    log('turn.done success=' + msg.success, msg.success ? 'in' : 'error');
+  }
+  else if (t === 'error') {
+    log('错误: ' + msg.message, 'error');
+  }
+  else {
+    log('收到: ' + JSON.stringify(msg).slice(0, 200), 'out');
+  }
+}
+
+// ============================================================
+// TTS Playback: PCM (24kHz 16bit mono) → WAV → Audio
+// ============================================================
+function playAllTts() {
+  if (ttsChunks.length === 0) { log('没有 TTS 音频数据', 'error'); return; }
+
+  // Merge all PCM chunks
+  const totalLen = ttsChunks.reduce((s, c) => s + c.length, 0);
+  const merged = new Uint8Array(totalLen);
+  let offset = 0;
+  for (const chunk of ttsChunks) {
+    merged.set(chunk, offset);
+    offset += chunk.length;
+  }
+
+  // PCM to float32 for AudioContext
+  const sampleRate = ttsSampleRate;
+  const audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate });
+  const int16View = new Int16Array(merged.buffer);
+  const numSamples = int16View.length;
+  const buffer = audioCtx.createBuffer(1, numSamples, sampleRate);
+  const channelData = buffer.getChannelData(0);
+  for (let i = 0; i < numSamples; i++) {
+    channelData[i] = int16View[i] / 32768.0;
+  }
+
+  const source = audioCtx.createBufferSource();
+  source.buffer = buffer;
+  source.connect(audioCtx.destination);
+  source.start(0);
+
+  document.getElementById('tts-status').textContent =
+    `播放中... ${numSamples} samples @ ${sampleRate}Hz`;
+
+  log(`播放 TTS: ${numSamples} samples, ${(numSamples / sampleRate).toFixed(1)}s`, 'tts');
+
+  // Reset for next turn
+  ttsChunks = [];
+  document.getElementById('btnPlayAll').disabled = true;
+}
+
+// ============================================================
+// REST API — 日程 CRUD 测试
+// ============================================================
+const API_BASE = 'http://localhost:8000';
+
+function showRestResult(ok, text) {
+  const el = document.getElementById('restResult');
+  el.style.color = ok ? '#2ecc71' : '#e74c3c';
+  el.textContent = text;
+  setTimeout(() => { el.textContent = ''; }, 5000);
+}
+
+async function eventsList() {
+  const start = document.getElementById('evtStart').value;
+  const end = document.getElementById('evtEnd').value;
+  const url = `${API_BASE}/api/events?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`;
+  log('GET ' + url, 'out');
+  try {
+    const r = await fetch(url);
+    const d = await r.json();
+    log('GET 列表: ' + (d.data||[]).length + ' 条', 'in');
+    showRestResult(true, '查询到 ' + (d.data||[]).length + ' 条日程');
+    if (d.data?.length) {
+      document.getElementById('evtId').value = d.data[0].id;
+      log('已自动填入首个日程 ID: ' + d.data[0].id, 'in');
+    }
+  } catch(e) {
+    log('GET 列表失败: ' + e.message, 'error');
+    showRestResult(false, '请求失败');
+  }
+}
+
+async function eventsCreate() {
+  const body = {
+    title: document.getElementById('evtTitle').value,
+    start_time: document.getElementById('evtStart2').value,
+    end_time: document.getElementById('evtEnd2').value,
+  };
+  log('POST ' + API_BASE + '/api/events ' + JSON.stringify(body), 'out');
+  try {
+    const r = await fetch(`${API_BASE}/api/events`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(body),
+    });
+    const d = await r.json();
+    if (d.code === 0) {
+      document.getElementById('evtId').value = d.data.id;
+      log('POST 创建成功: ' + d.data.id, 'in');
+      showRestResult(true, '已创建: ' + d.data.title);
+    } else {
+      log('POST 创建失败: ' + d.message, 'error');
+      showRestResult(false, d.message);
+    }
+  } catch(e) {
+    log('POST 创建失败: ' + e.message, 'error');
+    showRestResult(false, '请求失败');
+  }
+}
+
+async function eventsGet() {
+  const id = document.getElementById('evtId').value.trim();
+  if (!id) { log('请先填写 event_id', 'error'); return; }
+  const url = `${API_BASE}/api/events/${id}`;
+  log('GET ' + url, 'out');
+  try {
+    const r = await fetch(url);
+    const d = await r.json();
+    if (d.code === 0) {
+      log('GET 单个: ' + d.data.title + ' | ' + d.data.start_time, 'in');
+      showRestResult(true, d.data.title + ' @ ' + d.data.start_time);
+    } else {
+      log('GET 单个失败: ' + d.message, 'error');
+      showRestResult(false, d.message);
+    }
+  } catch(e) {
+    log('GET 单个失败: ' + e.message, 'error');
+    showRestResult(false, '请求失败');
+  }
+}
+
+async function eventsUpdate() {
+  const id = document.getElementById('evtId').value.trim();
+  if (!id) { log('请先填写 event_id', 'error'); return; }
+  const body = {
+    title: document.getElementById('evtTitle').value || '改后的日程',
+    start_time: document.getElementById('evtStart2').value,
+    end_time: document.getElementById('evtEnd2').value,
+  };
+  log('PUT ' + API_BASE + '/api/events/' + id + ' ' + JSON.stringify(body), 'out');
+  try {
+    const r = await fetch(`${API_BASE}/api/events/${id}`, {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(body),
+    });
+    const d = await r.json();
+    if (d.code === 0) {
+      log('PUT 修改成功: ' + d.data.title, 'in');
+      showRestResult(true, '已更新: ' + d.data.title);
+    } else {
+      log('PUT 修改失败: ' + d.message, 'error');
+      showRestResult(false, d.message);
+    }
+  } catch(e) {
+    log('PUT 修改失败: ' + e.message, 'error');
+    showRestResult(false, '请求失败');
+  }
+}
+
+async function eventsDelete() {
+  const id = document.getElementById('evtId').value.trim();
+  if (!id) { log('请先填写 event_id', 'error'); return; }
+  if (!confirm('确定删除 ' + id + ' 吗？')) return;
+  const url = `${API_BASE}/api/events/${id}`;
+  log('DELETE ' + url, 'out');
+  try {
+    const r = await fetch(url, { method: 'DELETE' });
+    const d = await r.json();
+    if (d.code === 0) {
+      log('DELETE 删除成功', 'in');
+      showRestResult(true, '已删除');
+      document.getElementById('evtId').value = '';
+    } else {
+      log('DELETE 删除失败: ' + d.message, 'error');
+      showRestResult(false, d.message);
+    }
+  } catch(e) {
+    log('DELETE 删除失败: ' + e.message, 'error');
+    showRestResult(false, '请求失败');
+  }
+}
+
+// ============================================================
+// Logging
+// ============================================================
+function log(msg, cls) {
+  const now = new Date().toLocaleTimeString();
+  const clsName = cls || 'out';
+  const div = document.getElementById('log');
+  div.innerHTML += `<div><span class="time">[${now}]</span> <span class="${clsName}">${escapeHtml(msg)}</span></div>`;
+  div.scrollTop = div.scrollHeight;
+}
+
+function clearLog() {
+  document.getElementById('log').innerHTML = '';
+}
+
+function escapeHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+// 键盘快捷键
+document.addEventListener('keydown', (e) => {
+  // Enter 发送文本
+  if (e.key === 'Enter' && e.target.id === 'textInput') {
+    e.preventDefault();
+    sendText();
+    return;
+  }
+  // 确认卡片显示时，Enter 确认 / Escape 取消
+  const confirmBox = document.getElementById('confirm-box');
+  if (confirmBox.style.display === 'block') {
+    if (e.key === 'Enter') { e.preventDefault(); sendConfirm(); }
+    else if (e.key === 'Escape') { e.preventDefault(); sendCancel(); }
+  }
+});
+</script>
+</body>
+</html>
