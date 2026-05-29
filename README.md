@@ -1,4 +1,11 @@
 # VoiceCal
+语音日历
+
+## 项目结构
+
+- `app/`: FastAPI + AgentScope Runtime 后端
+- `tests/`: 后端最小测试与 WebSocket 调试页
+- `frontend/`: 前端工程
 
 ## 智能处理能力
 
@@ -10,4 +17,3 @@
 - 支持基于工具返回结果的二次推理
 - 支持空闲时间推荐
 - 支持面向语音场景的简洁回复
-
