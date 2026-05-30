@@ -8,5 +8,3 @@ export const API_BASE_URL =
 /** WebSocket 语音地址，例如 ws://218.244.137.52:8000/ws/voice */
 export const WS_BASE_URL =
   import.meta.env.VITE_WS_URL || `ws://${API_HOST}:${API_PORT}/ws/voice`;
-
-export const DEFAULT_USER_ID = "demo_user";

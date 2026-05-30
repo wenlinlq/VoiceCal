@@ -2,7 +2,7 @@
 import logging
 
 import httpx
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -23,6 +23,32 @@ class WechatLoginRequest(BaseModel):
 class WechatLoginResponse(BaseModel):
     token: str
     user: dict
+
+
+class DevLoginRequest(BaseModel):
+    openid: str = Field(..., description="测试用 openid")
+
+
+@router.post("/dev-login", response_model=WechatLoginResponse)
+async def dev_login(req: DevLoginRequest, db: AsyncSession = Depends(get_db)):
+    """开发环境快捷登录，生产环境禁用。"""
+    if settings.app_env == "production":
+        raise HTTPException(status_code=403, detail="dev-login 在生产环境不可用")
+
+    openid = req.openid.strip()
+    if not openid:
+        raise HTTPException(status_code=400, detail="openid 不能为空")
+
+    service = UserService(db)
+    await service.get_or_create(openid)
+
+    token = create_token(openid)
+    logger.info("[开发登录] openid=%s", openid)
+
+    return WechatLoginResponse(
+        token=token,
+        user={"openid": openid},
+    )
 
 
 @router.post("/wechat-login", response_model=WechatLoginResponse)
@@ -55,7 +81,6 @@ async def wechat_login(req: WechatLoginRequest, db: AsyncSession = Depends(get_d
         errcode = wx_data.get("errcode", "unknown")
         errmsg = wx_data.get("errmsg", "unknown")
         logger.error("[微信登录] jscode2session失败 errcode=%s errmsg=%s", errcode, errmsg)
-        from fastapi import HTTPException
         raise HTTPException(status_code=401, detail=f"微信登录失败: {errmsg}")
 
     openid = wx_data["openid"]

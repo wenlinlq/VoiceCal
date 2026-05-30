@@ -18,14 +18,14 @@ export function createVoiceWsClient(handlers = {}) {
     return wsStore.send(payload);
   }
 
-  async function ensureConnected(userId) {
+  async function ensureConnected(token) {
     if (wsStore.connected && wsStore.socketTask) {
       return;
     }
     if (wsStore.connecting && connectPromise) {
       return connectPromise;
     }
-    connectPromise = wsStore.connect(userId).finally(() => {
+    connectPromise = wsStore.connect(token).finally(() => {
       connectPromise = null;
     });
     return connectPromise;
@@ -64,40 +64,36 @@ export function createVoiceWsClient(handlers = {}) {
     await ttsPlayer.waitUntilIdle(60000);
   }
 
-  function sendAudioStart(sessionId, sampleRate, userId) {
+  function sendAudioStart(sessionId, sampleRate) {
     return sendJson({
       type: "audio_start",
       session_id: sessionId,
-      user_id: userId,
       format: "pcm_s16le",
       sampleRate,
     });
   }
 
-  function sendAudioChunk(sessionId, frameBuffer, userId) {
+  function sendAudioChunk(sessionId, frameBuffer) {
     return sendJson({
       type: "audio.chunk",
       session_id: sessionId,
-      user_id: userId,
       data: arrayBufferToBase64(frameBuffer),
     });
   }
 
-  function sendAudioEnd(sessionId, sampleRate, userId) {
+  function sendAudioEnd(sessionId, sampleRate) {
     return sendJson({
       type: "audio.end",
       session_id: sessionId,
-      user_id: userId,
       sample_rate: sampleRate,
     });
   }
 
-  function sendText(sessionId, text, userId) {
+  function sendText(sessionId, text) {
     resetTtsTurn();
     return sendJson({
       type: "text.message",
       session_id: sessionId,
-      user_id: userId,
       text,
     });
   }
