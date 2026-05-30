@@ -26,6 +26,7 @@
     <GlobalVoice />
 
     <ConfirmDialog
+      v-if="confirmStore.visible && !voiceStore.sessionOpen"
       :visible="confirmStore.visible"
       :message="confirmStore.message"
       :event="confirmStore.event"
@@ -57,7 +58,7 @@ import EventFormModal from "@/components/EventFormModal/EventFormModal.vue";
 
 const calendarStore = useCalendarStore();
 const confirmStore = useConfirmStore();
-const { isVoiceActive } = useVoiceInteraction();
+const { voiceStore, isVoiceActive } = useVoiceInteraction();
 const { pageBottomStyle } = useMpSafeArea();
 const showCreateForm = ref(false);
 

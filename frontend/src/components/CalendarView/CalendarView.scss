@@ -71,36 +71,6 @@
   }
 }
 
-.icon-calendar {
-  width: 30rpx;
-  height: 30rpx;
-  border: 3rpx solid #333;
-  border-radius: 6rpx;
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-
-  &::before {
-    content: '';
-    position: absolute;
-    top: -3rpx;
-    left: 6rpx;
-    width: 4rpx;
-    height: 8rpx;
-    background: #333;
-    border-radius: 2rpx;
-    box-shadow: 14rpx 0 0 #333;
-  }
-
-  .cal-dot {
-    width: 8rpx;
-    height: 8rpx;
-    background: #333;
-    border-radius: 50%;
-  }
-}
-
 .icon-more {
   display: flex;
   flex-direction: column;
@@ -162,6 +132,7 @@
 
 .month-view {
   overflow: hidden;
+  touch-action: pan-y;
 }
 
 .slide-viewport {
@@ -169,80 +140,11 @@
   width: 100%;
 }
 
-.slide-stage {
-  position: relative;
-  width: 100%;
+.slide-track {
+  display: flex;
+  will-change: transform;
 }
 
 .month-panel {
-  width: 100%;
-
-  &.is-entering {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-  }
-}
-
-/* 下一个月：旧页向左出，新页从右进 */
-.is-leaving.dir-next {
-  animation: slideOutToLeft 0.32s cubic-bezier(0.25, 0.8, 0.25, 1) forwards;
-}
-
-.is-entering.dir-next {
-  transform: translateX(100%);
-
-  &.run {
-    animation: slideInFromRight 0.32s cubic-bezier(0.25, 0.8, 0.25, 1) forwards;
-  }
-}
-
-/* 上一个月：旧页向右出，新页从左进 */
-.is-leaving.dir-prev {
-  animation: slideOutToRight 0.32s cubic-bezier(0.25, 0.8, 0.25, 1) forwards;
-}
-
-.is-entering.dir-prev {
-  transform: translateX(-100%);
-
-  &.run {
-    animation: slideInFromLeft 0.32s cubic-bezier(0.25, 0.8, 0.25, 1) forwards;
-  }
-}
-
-@keyframes slideOutToLeft {
-  from {
-    transform: translateX(0);
-  }
-  to {
-    transform: translateX(-100%);
-  }
-}
-
-@keyframes slideInFromRight {
-  from {
-    transform: translateX(100%);
-  }
-  to {
-    transform: translateX(0);
-  }
-}
-
-@keyframes slideOutToRight {
-  from {
-    transform: translateX(0);
-  }
-  to {
-    transform: translateX(100%);
-  }
-}
-
-@keyframes slideInFromLeft {
-  from {
-    transform: translateX(-100%);
-  }
-  to {
-    transform: translateX(0);
-  }
+  flex-shrink: 0;
 }

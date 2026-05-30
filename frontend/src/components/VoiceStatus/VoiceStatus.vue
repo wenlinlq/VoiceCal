@@ -35,6 +35,8 @@ const props = defineProps({
   replyText: { type: String, default: '' },
   errorText: { type: String, default: '' },
   userText: { type: String, default: '' },
+  needConfirm: { type: Boolean, default: false },
+  queryListenMode: { type: Boolean, default: false },
   visible: { type: Boolean, default: true },
   centered: { type: Boolean, default: false },
 })
@@ -58,16 +60,29 @@ const label = computed(() => {
 
 const mainText = computed(() => {
   if (props.errorText) return props.errorText
-  if (props.status === 'speaking' && props.replyText) return props.replyText
+  if (!props.replyText) return ''
+  if (props.status === 'speaking') return props.replyText
+  if ((props.needConfirm || props.queryListenMode) && isListening.value) {
+    return props.replyText
+  }
   return ''
 })
 
 const hintText = computed(() => {
+  if (props.queryListenMode && isListening.value) {
+    return '说「结束」或「关闭」退出，10 秒无声音将自动结束'
+  }
+  if (props.needConfirm && isListening.value) {
+    return '请说「确认」或「取消」，也可点弹窗按钮'
+  }
   if (props.status === 'auto_listening') {
-    return '请继续说话，或说「退出」结束'
+    return '请说话…（3 秒无声音 Agent 会再说一遍）'
   }
   if (props.status === 'recording') {
     return '请说话...'
+  }
+  if (props.status === 'speaking') {
+    return 'Agent 播报中，请稍候'
   }
   return ''
 })

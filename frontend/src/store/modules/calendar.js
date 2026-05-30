@@ -67,6 +67,11 @@ export const useCalendarStore = defineStore('calendar', {
       }
     },
 
+    /** 语音 Agent 一轮 turn.done 后刷新日程列表 */
+    async syncAfterVoiceTurn() {
+      return this.fetchEvents(this.currentDate)
+    },
+
     async fetchEventById(id) {
       const cached = this.getEventById(id)
       if (cached) return cached

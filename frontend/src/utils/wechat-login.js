@@ -91,7 +91,8 @@ export function exchangeCodeWithBackend(code) {
         }
         reject(
           new Error(
-            res.data?.message || `后端登录失败（${res.statusCode || "unknown"}）`,
+            res.data?.message ||
+              `后端登录失败（${res.statusCode || "unknown"}）`,
           ),
         );
       },

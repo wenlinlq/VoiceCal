@@ -20,7 +20,18 @@
     :reply-text="voiceStore.replyText"
     :error-text="voiceStore.errorText"
     :user-text="voiceStore.userText"
+    :need-confirm="voiceStore.needConfirm"
+    :query-listen-mode="voiceStore.queryListenMode"
     @close="closeVoiceSession"
+  />
+
+  <ConfirmDialog
+    v-if="confirmStore.visible && voiceStore.sessionOpen"
+    :visible="confirmStore.visible"
+    :message="confirmStore.message"
+    :event="confirmStore.event"
+    @confirm="onVoiceConfirm"
+    @cancel="onVoiceCancel"
   />
 </template>
 
@@ -28,15 +39,20 @@
 import { computed } from 'vue'
 import { useVoiceInteraction } from '@/composables/useVoiceInteraction.js'
 import { useMpSafeArea } from '@/composables/useMpSafeArea.js'
+import { useConfirmStore } from '@/store/modules/confirm.js'
 import { VOICE_STATUS } from '@/store/modules/voice.js'
 import RecordButton from '@/components/RecordButton/RecordButton.vue'
 import VoiceInteractionLayer from '@/components/VoiceInteractionLayer/VoiceInteractionLayer.vue'
+import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog.vue'
 
+const confirmStore = useConfirmStore()
 const {
   voiceStore,
   showVoiceLayer,
   onMicClick,
   closeVoiceSession,
+  onVoiceConfirm,
+  onVoiceCancel,
 } = useVoiceInteraction()
 
 const { micWrapStyle } = useMpSafeArea()

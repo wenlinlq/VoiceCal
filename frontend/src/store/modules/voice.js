@@ -18,6 +18,7 @@ export const useVoiceStore = defineStore('voice', {
     replyText: '',
     errorText: '',
     needConfirm: false,
+    queryListenMode: false,
     asrText: '',
     asrTempText: '',
   }),
@@ -69,6 +70,10 @@ export const useVoiceStore = defineStore('voice', {
       this.errorText = ''
     },
 
+    setQueryListenMode(enabled) {
+      this.queryListenMode = Boolean(enabled)
+    },
+
     setError(message) {
       this.errorText = message || '语音服务异常'
       this.replyText = ''
@@ -79,6 +84,7 @@ export const useVoiceStore = defineStore('voice', {
       this.replyText = ''
       this.errorText = ''
       this.needConfirm = false
+      this.queryListenMode = false
       this.asrText = ''
       this.asrTempText = ''
     },
