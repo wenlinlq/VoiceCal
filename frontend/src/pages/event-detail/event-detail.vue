@@ -87,6 +87,10 @@ import { useMpSafeArea } from "@/composables/useMpSafeArea.js";
 import ConfirmDialog from "@/components/ConfirmDialog/ConfirmDialog.vue";
 import EventFormModal from "@/components/EventFormModal/EventFormModal.vue";
 import GlobalVoice from "@/components/GlobalVoice/GlobalVoice.vue";
+import {
+  prepareEventForSave,
+  getRemindSuccessHint,
+} from "@/utils/mp-subscribe-message.js";
 
 const calendarStore = useCalendarStore();
 const { navBarStyle, pageBottomStyle } = useMpSafeArea();
@@ -151,11 +155,19 @@ function onEdit() {
 async function onSaveEdit(data) {
   if (!event.value) return;
   try {
-    await calendarStore.updateEvent({ id: event.value.id, ...data });
-    event.value = calendarStore.getEventById(event.value.id);
+    const prepared = await prepareEventForSave(data);
+    const updated = await calendarStore.updateEvent({
+      id: event.value.id,
+      ...prepared,
+    });
+    event.value = calendarStore.getEventById(event.value.id) || updated;
     fromDate.value = event.value.start_time.slice(0, 10);
     showEditForm.value = false;
-    uni.showToast({ title: "已保存", icon: "success" });
+    uni.showToast({
+      title: `已保存${getRemindSuccessHint(updated)}`,
+      icon: "success",
+      duration: prepared.remind_enabled ? 2800 : 1500,
+    });
   } catch (error) {
     uni.showToast({ title: error.message || "保存失败", icon: "none" });
   }

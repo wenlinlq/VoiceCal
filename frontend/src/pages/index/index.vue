@@ -55,6 +55,10 @@ import EventList from "@/components/EventList/EventList.vue";
 import GlobalVoice from "@/components/GlobalVoice/GlobalVoice.vue";
 import ConfirmDialog from "@/components/ConfirmDialog/ConfirmDialog.vue";
 import EventFormModal from "@/components/EventFormModal/EventFormModal.vue";
+import {
+  prepareEventForSave,
+  getRemindSuccessHint,
+} from "@/utils/mp-subscribe-message.js";
 
 const calendarStore = useCalendarStore();
 const confirmStore = useConfirmStore();
@@ -128,10 +132,15 @@ function onMenu() {
 
 async function onCreateEvent(data) {
   try {
-    await calendarStore.addEvent(data);
+    const prepared = await prepareEventForSave(data);
+    const created = await calendarStore.addEvent(prepared);
     showCreateForm.value = false;
-    calendarStore.setCurrentDate(data.start_time.slice(0, 10));
-    uni.showToast({ title: "日程已创建", icon: "success" });
+    calendarStore.setCurrentDate(prepared.start_time.slice(0, 10));
+    uni.showToast({
+      title: `日程已创建${getRemindSuccessHint(created)}`,
+      icon: "success",
+      duration: prepared.remind_enabled ? 2800 : 1500,
+    });
   } catch (error) {
     uni.showToast({ title: error.message || "创建失败", icon: "none" });
   }

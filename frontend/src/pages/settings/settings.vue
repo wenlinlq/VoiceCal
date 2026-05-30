@@ -11,6 +11,18 @@
         <text class="item-arrow">›</text>
       </view>
 
+      <!-- #ifdef MP-WEIXIN -->
+      <view class="settings-item" @tap="onSubscribeMessage">
+        <view class="item-left">
+          <view class="item-info">
+            <text class="item-title">订阅消息提醒</text>
+            <text class="item-desc">{{ subscribeDesc }}</text>
+          </view>
+        </view>
+        <text class="item-arrow">›</text>
+      </view>
+      <!-- #endif -->
+
       <view class="settings-item" @tap="clearCache">
         <view class="item-left">
           <view class="item-info">
@@ -85,7 +97,8 @@
 import { ref } from "vue";
 import { useWebSocketStore } from "@/store/modules/websocket.js";
 import { useMpSafeArea } from "@/composables/useMpSafeArea.js";
-import { API_BASE_URL } from "@/config/api.js";
+import { API_BASE_URL, SUBSCRIBE_TEMPLATE_ID } from "@/config/api.js";
+import { promptSubscribeMessage } from "@/utils/mp-subscribe-message.js";
 import GlobalVoice from "@/components/GlobalVoice/GlobalVoice.vue";
 
 const wsStore = useWebSocketStore();
@@ -93,6 +106,9 @@ const { pageBottomStyle } = useMpSafeArea();
 const wsUrl = ref(wsStore.serverUrl);
 const apiUrl = API_BASE_URL;
 const micStatusText = ref("点击检查权限");
+const subscribeDesc = SUBSCRIBE_TEMPLATE_ID
+  ? "授权后可接收日程开始前的微信提醒"
+  : "未配置模板 ID（见 .env.local）";
 
 const guideItems = [
   "「明天下午3点开会」— 添加日程",
@@ -100,6 +116,10 @@ const guideItems = [
   "「删除今天下午3点的会」— 删除事件",
   "「把明天的会改到后天」— 修改事件",
 ];
+
+function onSubscribeMessage() {
+  promptSubscribeMessage();
+}
 
 function checkMicPermission() {
   // #ifdef MP-WEIXIN

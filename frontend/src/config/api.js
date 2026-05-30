@@ -8,3 +8,7 @@ export const API_BASE_URL =
 /** WebSocket 语音地址，例如 ws://218.244.137.52:8000/ws/voice */
 export const WS_BASE_URL =
   import.meta.env.VITE_WS_URL || `ws://${API_HOST}:${API_PORT}/ws/voice`;
+
+/** 微信订阅消息模板 ID（与公众平台配置一致） */
+export const SUBSCRIBE_TEMPLATE_ID =
+  import.meta.env.VITE_WECHAT_SUBSCRIBE_TEMPLATE_ID || "";
