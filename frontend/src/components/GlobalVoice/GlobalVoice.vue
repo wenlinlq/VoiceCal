@@ -36,16 +36,16 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
-import { useVoiceInteraction } from '@/composables/useVoiceInteraction.js'
-import { useMpSafeArea } from '@/composables/useMpSafeArea.js'
-import { useConfirmStore } from '@/store/modules/confirm.js'
-import { VOICE_STATUS } from '@/store/modules/voice.js'
-import RecordButton from '@/components/RecordButton/RecordButton.vue'
-import VoiceInteractionLayer from '@/components/VoiceInteractionLayer/VoiceInteractionLayer.vue'
-import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog.vue'
+import { computed } from "vue";
+import { useVoiceInteraction } from "@/composables/useVoiceInteraction.js";
+import { useMpSafeArea } from "@/composables/useMpSafeArea.js";
+import { useConfirmStore } from "@/store/modules/confirm.js";
+import { VOICE_STATUS } from "@/store/modules/voice.js";
+import RecordButton from "@/components/RecordButton/RecordButton.vue";
+import VoiceInteractionLayer from "@/components/VoiceInteractionLayer/VoiceInteractionLayer.vue";
+import ConfirmDialog from "@/components/ConfirmDialog/ConfirmDialog.vue";
 
-const confirmStore = useConfirmStore()
+const confirmStore = useConfirmStore();
 const {
   voiceStore,
   showVoiceLayer,
@@ -53,11 +53,11 @@ const {
   closeVoiceSession,
   onVoiceConfirm,
   onVoiceCancel,
-} = useVoiceInteraction()
+} = useVoiceInteraction();
 
-const { micWrapStyle } = useMpSafeArea()
+const { micWrapStyle } = useMpSafeArea();
 
-const inSession = computed(() => voiceStore.status !== VOICE_STATUS.IDLE)
+const inSession = computed(() => voiceStore.status !== VOICE_STATUS.IDLE);
 </script>
 
 <style lang="scss" scoped>

@@ -20,6 +20,7 @@ export function normalizeEvent(raw) {
     end_time: fromApiDateTime(raw.end_time),
     note: raw.description || '',
     location: raw.location || '',
+    is_all_day: Boolean(raw.is_all_day),
     repeat_type: 'none',
     completed: false,
   }
@@ -33,7 +34,7 @@ export function toApiEventPayload(event) {
     location: event.location || null,
     start_time: toApiDateTime(event.start_time),
     end_time: toApiDateTime(event.end_time),
-    is_all_day: false,
+    is_all_day: Boolean(event.is_all_day),
   }
 
   if (event.title === undefined) delete payload.title

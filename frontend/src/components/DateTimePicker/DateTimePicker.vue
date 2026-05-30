@@ -24,7 +24,7 @@
             <text>{{ item.label }}</text>
           </view>
         </picker-view-column>
-        <picker-view-column class="dtp-col-hour">
+        <picker-view-column v-if="!dateOnly" class="dtp-col-hour">
           <view
             v-for="(item, idx) in hourOptions"
             :key="item"
@@ -35,7 +35,7 @@
             <text class="wheel-unit">时</text>
           </view>
         </picker-view-column>
-        <picker-view-column class="dtp-col-minute">
+        <picker-view-column v-if="!dateOnly" class="dtp-col-minute">
           <view
             v-for="(item, idx) in minuteOptions"
             :key="item"
@@ -48,7 +48,7 @@
         </picker-view-column>
       </picker-view>
 
-      <view class="dtp-lunar-row">
+      <view v-if="!dateOnly" class="dtp-lunar-row">
         <text class="dtp-lunar-label">农历</text>
         <switch :checked="useLunar" color="#1a73e8" @change="onLunarToggle" />
       </view>
@@ -81,6 +81,7 @@ const props = defineProps({
   visible: { type: Boolean, default: false },
   title: { type: String, default: "选择时间" },
   modelValue: { type: String, default: "" },
+  dateOnly: { type: Boolean, default: false },
 });
 
 const emit = defineEmits(["update:modelValue", "close", "confirm"]);
@@ -111,6 +112,9 @@ let closeTimer = null;
 
 const previewText = computed(() => {
   if (!draftValue.value) return "";
+  if (props.dateOnly) {
+    return formatDateTimePreview(draftValue.value).split(" ")[0];
+  }
   if (!useLunar.value) {
     return formatDateTimePreview(draftValue.value);
   }
@@ -189,7 +193,11 @@ function syncDraftValue(nextIndexes = indexes.value) {
   const dateItem = dateOptions.value[nextIndexes[0]];
   if (!dateItem) return;
   const date = parseDateTime(`${dateItem.value} 00:00:00`);
-  date.setHours(nextIndexes[1], nextIndexes[2], 0, 0);
+  if (props.dateOnly) {
+    date.setHours(0, 0, 0, 0);
+  } else {
+    date.setHours(nextIndexes[1], nextIndexes[2], 0, 0);
+  }
   draftValue.value = formatDateTimeValue(date);
 }
 

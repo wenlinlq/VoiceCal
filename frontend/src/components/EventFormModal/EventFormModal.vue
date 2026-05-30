@@ -24,15 +24,23 @@
           </div>
 
           <div class="time-list">
+            <div class="time-row all-day-row">
+              <span class="time-label">全天日程</span>
+              <switch
+                :checked="form.is_all_day"
+                color="#1a73e8"
+                @change="onAllDayChange"
+              />
+            </div>
             <div class="time-row" @click.stop="openPicker('start')">
-              <span class="time-label">开始时间</span>
+              <span class="time-label">{{ startTimeLabel }}</span>
               <span class="time-value">
                 {{ startDisplay }}
                 <span class="chevron">›</span>
               </span>
             </div>
             <div class="time-row" @click.stop="openPicker('end')">
-              <span class="time-label">结束时间</span>
+              <span class="time-label">{{ endTimeLabel }}</span>
               <span class="time-value">
                 {{ endDisplay }}
                 <span class="chevron">›</span>
@@ -84,6 +92,7 @@
       :visible="pickerVisible"
       :title="pickerTitle"
       :model-value="pickerValue"
+      :date-only="form.is_all_day"
       @close="pickerVisible = false"
       @confirm="onPickerConfirm"
     />
@@ -115,15 +124,23 @@
         </view>
 
         <view class="time-list">
+          <view class="time-row all-day-row">
+            <text class="time-label">全天日程</text>
+            <switch
+              :checked="form.is_all_day"
+              color="#1a73e8"
+              @change="onAllDayChange"
+            />
+          </view>
           <view class="time-row" @tap.stop="openPicker('start')">
-            <text class="time-label">开始时间</text>
+            <text class="time-label">{{ startTimeLabel }}</text>
             <view class="time-value">
               <text>{{ startDisplay }}</text>
               <text class="chevron">›</text>
             </view>
           </view>
           <view class="time-row" @tap.stop="openPicker('end')">
-            <text class="time-label">结束时间</text>
+            <text class="time-label">{{ endTimeLabel }}</text>
             <view class="time-value">
               <text>{{ endDisplay }}</text>
               <text class="chevron">›</text>
@@ -169,6 +186,7 @@
       :visible="pickerVisible"
       :title="pickerTitle"
       :model-value="pickerValue"
+      :date-only="form.is_all_day"
       @close="pickerVisible = false"
       @confirm="onPickerConfirm"
     />
@@ -183,6 +201,7 @@ import {
   formatDate,
   formatDateTimeValue,
   formatDateTimeRow,
+  formatDateRow,
   parseDateTime
 } from '@/utils/date.js'
 import DateTimePicker from '@/components/DateTimePicker/DateTimePicker.vue'
@@ -207,6 +226,7 @@ const form = reactive({
   title: '',
   startDateTime: '',
   endDateTime: '',
+  is_all_day: false,
   repeat_type: 'none',
   note: ''
 })
@@ -234,11 +254,26 @@ const formTitle = computed(() =>
   props.mode === 'edit' ? '编辑日程' : '新建日程'
 )
 
-const startDisplay = computed(() => formatDateTimeRow(form.startDateTime))
-const endDisplay = computed(() => formatDateTimeRow(form.endDateTime))
+const startTimeLabel = computed(() =>
+  form.is_all_day ? '开始日期' : '开始时间'
+)
+const endTimeLabel = computed(() =>
+  form.is_all_day ? '结束日期' : '结束时间'
+)
+
+const startDisplay = computed(() =>
+  form.is_all_day
+    ? formatDateRow(form.startDateTime)
+    : formatDateTimeRow(form.startDateTime)
+)
+const endDisplay = computed(() =>
+  form.is_all_day
+    ? formatDateRow(form.endDateTime)
+    : formatDateTimeRow(form.endDateTime)
+)
 
 const pickerTitle = computed(() =>
-  pickerTarget.value === 'start' ? '开始时间' : '结束时间'
+  pickerTarget.value === 'start' ? startTimeLabel.value : endTimeLabel.value
 )
 
 const pickerValue = computed(() =>
@@ -287,6 +322,7 @@ function resetForm() {
   form.title = ''
   form.startDateTime = buildDefaultStart()
   form.endDateTime = buildDefaultEnd()
+  form.is_all_day = false
   form.repeat_type = 'none'
   form.note = ''
 }
@@ -296,11 +332,51 @@ function loadForm() {
     form.title = props.eventData.title || ''
     form.startDateTime = props.eventData.start_time || buildDefaultStart()
     form.endDateTime = props.eventData.end_time || buildDefaultEnd()
+    form.is_all_day = Boolean(props.eventData.is_all_day)
     form.repeat_type = props.eventData.repeat_type || 'none'
     form.note = props.eventData.note || ''
+    if (form.is_all_day) {
+      applyAllDayTimes()
+    }
     return
   }
   resetForm()
+}
+
+function applyAllDayTimes() {
+  const startDate = formatDate(parseDateTime(form.startDateTime))
+  let endDate = formatDate(parseDateTime(form.endDateTime))
+  if (parseDateTime(form.endDateTime) < parseDateTime(form.startDateTime)) {
+    endDate = startDate
+  }
+  form.startDateTime = `${startDate} 00:00:00`
+  form.endDateTime = `${endDate} 23:59:59`
+}
+
+function restoreTimedDefaults() {
+  const startDate = formatDate(parseDateTime(form.startDateTime))
+  const endDate = formatDate(parseDateTime(form.endDateTime))
+  form.startDateTime = `${startDate} 09:00:00`
+  const endCandidate = parseDateTime(`${endDate} 10:00:00`)
+  if (endCandidate <= parseDateTime(form.startDateTime)) {
+    const end = parseDateTime(form.startDateTime)
+    end.setHours(end.getHours() + 1)
+    form.endDateTime = formatDateTimeValue(end)
+  } else {
+    form.endDateTime = `${endDate} 10:00:00`
+  }
+}
+
+function onAllDayChange(e) {
+  const checked = e?.detail?.value !== undefined
+    ? Boolean(e.detail.value)
+    : !form.is_all_day
+  form.is_all_day = checked
+  if (checked) {
+    applyAllDayTimes()
+  } else {
+    restoreTimedDefaults()
+  }
 }
 
 function onRepeatChange(e) {
@@ -314,6 +390,28 @@ function openPicker(target) {
 }
 
 function onPickerConfirm(value) {
+  if (form.is_all_day) {
+    const dateStr = formatDate(parseDateTime(value))
+    if (pickerTarget.value === 'start') {
+      form.startDateTime = `${dateStr} 00:00:00`
+      const endDate = formatDate(parseDateTime(form.endDateTime))
+      if (parseDateTime(form.endDateTime) < parseDateTime(form.startDateTime)) {
+        form.endDateTime = `${dateStr} 23:59:59`
+      } else {
+        form.endDateTime = `${endDate} 23:59:59`
+      }
+    } else {
+      if (parseDateTime(`${dateStr} 23:59:59`) < parseDateTime(form.startDateTime)) {
+        uni.showToast({ title: '结束日期不能早于开始日期', icon: 'none' })
+        const startDate = formatDate(parseDateTime(form.startDateTime))
+        form.endDateTime = `${startDate} 23:59:59`
+      } else {
+        form.endDateTime = `${dateStr} 23:59:59`
+      }
+    }
+    return
+  }
+
   if (pickerTarget.value === 'start') {
     form.startDateTime = value
     if (parseDateTime(form.endDateTime) <= parseDateTime(value)) {
@@ -354,11 +452,15 @@ function onSave() {
     uni.showToast({ title: '请输入标题', icon: 'none' })
     return
   }
+  if (form.is_all_day) {
+    applyAllDayTimes()
+  }
   emit('save', {
     ...(props.mode === 'edit' && props.eventData ? { id: props.eventData.id } : {}),
     title: form.title.trim(),
     start_time: form.startDateTime,
     end_time: form.endDateTime,
+    is_all_day: form.is_all_day,
     repeat_type: form.repeat_type,
     note: form.note.trim()
   })
@@ -500,6 +602,14 @@ function onSave() {
 
   &:active {
     opacity: 0.7;
+  }
+}
+
+.all-day-row {
+  cursor: default;
+
+  &:active {
+    opacity: 1;
   }
 }
 

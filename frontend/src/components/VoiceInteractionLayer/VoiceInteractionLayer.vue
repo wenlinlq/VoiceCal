@@ -18,55 +18,55 @@
 </template>
 
 <script setup>
-import { ref, watch, onBeforeUnmount } from 'vue'
-import { rafTwice } from '@/utils/raf.js'
-import VoiceStatus from '@/components/VoiceStatus/VoiceStatus.vue'
+import { ref, watch, onBeforeUnmount } from "vue";
+import { rafTwice } from "@/utils/raf.js";
+import VoiceStatus from "@/components/VoiceStatus/VoiceStatus.vue";
 
 const props = defineProps({
   show: { type: Boolean, default: false },
-  status: { type: String, default: 'idle' },
-  replyText: { type: String, default: '' },
-  errorText: { type: String, default: '' },
-  userText: { type: String, default: '' },
+  status: { type: String, default: "idle" },
+  replyText: { type: String, default: "" },
+  errorText: { type: String, default: "" },
+  userText: { type: String, default: "" },
   needConfirm: { type: Boolean, default: false },
   queryListenMode: { type: Boolean, default: false },
-})
+});
 
-const emit = defineEmits(['close'])
+const emit = defineEmits(["close"]);
 
-const mounted = ref(false)
-const active = ref(false)
-let hideTimer = null
+const mounted = ref(false);
+const active = ref(false);
+let hideTimer = null;
 
 watch(
   () => props.show,
   (val) => {
     if (hideTimer) {
-      clearTimeout(hideTimer)
-      hideTimer = null
+      clearTimeout(hideTimer);
+      hideTimer = null;
     }
     if (val) {
-      mounted.value = true
+      mounted.value = true;
       rafTwice(() => {
-        active.value = true
-      })
+        active.value = true;
+      });
     } else {
-      active.value = false
+      active.value = false;
       hideTimer = setTimeout(() => {
-        mounted.value = false
-      }, 380)
+        mounted.value = false;
+      }, 380);
     }
   },
   { immediate: true },
-)
+);
 
 function onMaskTap() {
-  emit('close')
+  emit("close");
 }
 
 onBeforeUnmount(() => {
-  if (hideTimer) clearTimeout(hideTimer)
-})
+  if (hideTimer) clearTimeout(hideTimer);
+});
 </script>
 
 <style lang="scss" scoped>
@@ -107,7 +107,9 @@ onBeforeUnmount(() => {
   transform: translateY(-50%) scale(0.96);
   z-index: 2;
   opacity: 0;
-  transition: opacity 0.35s ease, transform 0.35s ease;
+  transition:
+    opacity 0.35s ease,
+    transform 0.35s ease;
   pointer-events: none;
   box-sizing: border-box;
 }

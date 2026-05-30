@@ -179,6 +179,16 @@ export function formatDateTimeRow(value) {
   return `${y}年${m}月${d}日${wd} ${period}${h12}:${min}`
 }
 
+/** 全天日程行展示：2026年5月29日周五 */
+export function formatDateRow(value) {
+  const date = parseDateTime(value)
+  const y = date.getFullYear()
+  const m = date.getMonth() + 1
+  const d = date.getDate()
+  const wd = WEEKDAY_CN[date.getDay()]
+  return `${y}年${m}月${d}日${wd}`
+}
+
 /**
  * 选择器预览：2026年5月29日周五 17:30
  * @param {string} value

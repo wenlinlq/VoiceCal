@@ -17,79 +17,83 @@
       <text class="status-label">{{ label }}</text>
       <text v-if="mainText" class="reply-text">{{ mainText }}</text>
       <text v-if="hintText" class="hint-text">{{ hintText }}</text>
-      <text v-if="userText && showUserText" class="user-text">{{ userText }}</text>
+      <text v-if="userText && showUserText" class="user-text">{{
+        userText
+      }}</text>
     </view>
   </view>
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed } from "vue";
 
 const props = defineProps({
   status: {
     type: String,
-    default: 'idle',
+    default: "idle",
     validator: (v) =>
-      ['idle', 'recording', 'thinking', 'speaking', 'auto_listening'].includes(v),
+      ["idle", "recording", "thinking", "speaking", "auto_listening"].includes(
+        v,
+      ),
   },
-  replyText: { type: String, default: '' },
-  errorText: { type: String, default: '' },
-  userText: { type: String, default: '' },
+  replyText: { type: String, default: "" },
+  errorText: { type: String, default: "" },
+  userText: { type: String, default: "" },
   needConfirm: { type: Boolean, default: false },
   queryListenMode: { type: Boolean, default: false },
   visible: { type: Boolean, default: true },
   centered: { type: Boolean, default: false },
-})
+});
 
-const show = computed(() => props.visible)
+const show = computed(() => props.visible);
 
 const isListening = computed(
-  () => props.status === 'recording' || props.status === 'auto_listening',
-)
+  () => props.status === "recording" || props.status === "auto_listening",
+);
 
 const label = computed(() => {
-  if (props.errorText) return '提示'
+  if (props.errorText) return "提示";
   const map = {
-    recording: '聆听中...',
-    thinking: '思考中...',
-    speaking: '播报中',
-    auto_listening: '聆听中...',
-  }
-  return map[props.status] || ''
-})
+    recording: "聆听中...",
+    thinking: "思考中...",
+    speaking: "播报中",
+    auto_listening: "聆听中...",
+  };
+  return map[props.status] || "";
+});
 
 const mainText = computed(() => {
-  if (props.errorText) return props.errorText
-  if (!props.replyText) return ''
-  if (props.status === 'speaking') return props.replyText
+  if (props.errorText) return props.errorText;
+  if (!props.replyText) return "";
+  if (props.status === "speaking") return props.replyText;
   if ((props.needConfirm || props.queryListenMode) && isListening.value) {
-    return props.replyText
+    return props.replyText;
   }
-  return ''
-})
+  return "";
+});
 
 const hintText = computed(() => {
   if (props.queryListenMode && isListening.value) {
-    return '说「结束」或「关闭」退出，10 秒无声音将自动结束'
+    return "说「结束」或「关闭」退出，10 秒无声音将自动结束";
   }
   if (props.needConfirm && isListening.value) {
-    return '请说「确认」或「取消」，也可点弹窗按钮'
+    return "请说「确认」或「取消」，也可点弹窗按钮";
   }
-  if (props.status === 'auto_listening') {
-    return '请说话…（3 秒无声音 Agent 会再说一遍）'
+  if (props.status === "auto_listening") {
+    return "请说话…（3 秒无声音 Agent 会再说一遍）";
   }
-  if (props.status === 'recording') {
-    return '请说话...'
+  if (props.status === "recording") {
+    return "请说话...";
   }
-  if (props.status === 'speaking') {
-    return 'Agent 播报中，请稍候'
+  if (props.status === "speaking") {
+    return "Agent 播报中，请稍候";
   }
-  return ''
-})
+  return "";
+});
 
 const showUserText = computed(() => {
-  return Boolean(props.userText) && props.status === 'speaking'
-})
+  return Boolean(props.userText) && props.status === "speaking";
+});
 </script>
 
 <style lang="scss" scoped>

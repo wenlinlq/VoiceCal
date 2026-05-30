@@ -265,7 +265,11 @@ export function useVoiceInteraction() {
             exitToIdle();
             return;
           }
-          if (hasSpoken && audioStreamStarted && silentFor >= RECORD_SILENCE_MS) {
+          if (
+            hasSpoken &&
+            audioStreamStarted &&
+            silentFor >= RECORD_SILENCE_MS
+          ) {
             isQueryListenRound = false;
             voiceStore.setQueryListenMode(false);
             finishRecordingAndSend();
