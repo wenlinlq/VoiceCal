@@ -30,7 +30,10 @@
 			}
 		},
 		mounted() {
-			this.isIOS = (uni.getSystemInfoSync().platform === 'ios');
+			const deviceInfo = typeof uni.getDeviceInfo === 'function'
+				? uni.getDeviceInfo()
+				: uni.getSystemInfoSync();
+			this.isIOS = (deviceInfo.platform === 'ios');
 			uni.onNetworkStatusChange((res) => {
 				this.isConnected = res.isConnected;
 				this.networkType = res.networkType;

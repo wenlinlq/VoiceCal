@@ -142,6 +142,7 @@ class CalendarAgentService:
             start_time: str | None = None,
             end_time: str | None = None,
             is_all_day: bool | None = None,
+            completed: bool | None = None,
             confirm: bool | None = None,
         ) -> dict[str, Any]:
             args: dict[str, Any] = {"event_id": event_id}
@@ -157,6 +158,8 @@ class CalendarAgentService:
                 args["end_time"] = end_time
             if is_all_day is not None:
                 args["is_all_day"] = is_all_day
+            if completed is not None:
+                args["completed"] = completed
             if confirm is not None:
                 args["confirm"] = confirm
             return await TOOL_REGISTRY["update_calendar_event"](db, user_id, args)

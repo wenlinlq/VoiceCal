@@ -73,7 +73,7 @@
         <input
           class="ws-input"
           v-model="wsUrl"
-          placeholder="ws://218.244.137.52:8000/ws/voice"
+          placeholder="ws://10.4.241.8:8000/ws/voice"
           @blur="saveWsUrl"
         />
       </view>

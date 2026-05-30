@@ -1,7 +1,7 @@
 """
 TTS 语音合成服务（Fallback 路径）。
 
-当前实现：DashScope qwen-tts，通过 SpeechSynthesizer 回调式合成。
+    当前实现：DashScope qwen-tts，通过 SpeechSynthesizer 回调式合成 PCM。
 仅在 ReActAgent 原生 TTS 不可用时作为兜底使用。
 
 主路径 TTS 由 AgentScope ReActAgent(tts_model=...) 原生提供，
@@ -72,7 +72,7 @@ class DashScopeTTSService(TTSService):
     Fallback TTS 服务：独立调用 DashScope SpeechSynthesizer。
 
     仅在 ReActAgent 未返回 speech 时由 WebSocket 层调用。
-    模型：qwen-tts，输出 WAV 格式。
+    模型：qwen-tts，输出 PCM 格式。
     """
 
     def __init__(self, api_key: Optional[str] = None):
@@ -97,7 +97,7 @@ class DashScopeTTSService(TTSService):
                 model="qwen-tts",
                 text=text,
                 api_key=self.api_key,
-                format="wav",
+                format="pcm",
                 callback=collector,
             )
 

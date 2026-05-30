@@ -65,6 +65,7 @@ export function createVoiceWsClient(handlers = {}) {
   }
 
   function sendAudioStart(sessionId, sampleRate) {
+    resetTtsTurn();
     return sendJson({
       type: "audio_start",
       session_id: sessionId,

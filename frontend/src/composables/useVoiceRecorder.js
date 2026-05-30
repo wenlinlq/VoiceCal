@@ -22,11 +22,38 @@ registerProcessor('${PCM_WORKLET_NAME}', PcmCaptureProcessor)
 export function useVoiceRecorder() {
   const recording = ref(false);
   let recorder = null;
+  let recorderFrameHandler = null;
+  let recorderErrorHandler = null;
+  let recorderStopHandler = null;
+  let stopPromise = null;
+  let resolveStop = null;
+  let mpStoppedAudioBuffer = null;
+  let mpStoppedAudioMeta = null;
   let h5Context = null;
   let h5Stream = null;
   let h5WorkletNode = null;
   let h5Source = null;
   let sampleRate = 16000;
+
+  function resetStoppedAudio() {
+    mpStoppedAudioBuffer = null;
+    mpStoppedAudioMeta = null;
+  }
+
+  function readMpFileAsArrayBuffer(filePath) {
+    return new Promise((resolve, reject) => {
+      if (!filePath) {
+        resolve(null);
+        return;
+      }
+      const fs = uni.getFileSystemManager();
+      fs.readFile({
+        filePath,
+        success: (res) => resolve(res.data || null),
+        fail: reject,
+      });
+    });
+  }
 
   async function start(onFrame) {
     if (recording.value) return sampleRate;
@@ -34,16 +61,65 @@ export function useVoiceRecorder() {
     // #ifdef MP-WEIXIN
     recording.value = true;
     sampleRate = 16000;
-    recorder = uni.getRecorderManager();
-    recorder.onFrameRecorded((res) => {
+    resetStoppedAudio();
+    if (!recorder) {
+      recorder = uni.getRecorderManager();
+    }
+
+    if (recorderFrameHandler && typeof recorder.offFrameRecorded === "function") {
+      recorder.offFrameRecorded(recorderFrameHandler);
+    }
+    if (recorderErrorHandler && typeof recorder.offError === "function") {
+      recorder.offError(recorderErrorHandler);
+    }
+    if (recorderStopHandler && typeof recorder.offStop === "function") {
+      recorder.offStop(recorderStopHandler);
+    }
+
+    recorderFrameHandler = (res) => {
       if (res.frameBuffer && onFrame) {
         onFrame(res.frameBuffer);
       }
-    });
-    recorder.onError((err) => {
+    };
+    recorderErrorHandler = (err) => {
       console.error("[recorder] error", err);
       recording.value = false;
-    });
+      resetStoppedAudio();
+      if (resolveStop) {
+        resolveStop();
+        resolveStop = null;
+        stopPromise = null;
+      }
+    };
+    recorderStopHandler = async (res = {}) => {
+      recording.value = false;
+      mpStoppedAudioMeta = {
+        tempFilePath: res.tempFilePath || "",
+        duration: Number(res.duration || 0),
+        fileSize: Number(res.fileSize || 0),
+      };
+      try {
+        mpStoppedAudioBuffer = await readMpFileAsArrayBuffer(res.tempFilePath);
+        console.log("[recorder] stop file ready", {
+          duration: mpStoppedAudioMeta.duration,
+          fileSize: mpStoppedAudioMeta.fileSize,
+          readBytes: mpStoppedAudioBuffer?.byteLength || 0,
+        });
+      } catch (err) {
+        console.warn("[recorder] read stop file failed", err);
+        mpStoppedAudioBuffer = null;
+      }
+      if (resolveStop) {
+        resolveStop();
+        resolveStop = null;
+        stopPromise = null;
+      }
+    };
+
+    recorder.onFrameRecorded(recorderFrameHandler);
+    recorder.onError(recorderErrorHandler);
+    recorder.onStop(recorderStopHandler);
+
     recorder.start({
       duration: 600000,
       sampleRate: 16000,
@@ -145,20 +221,34 @@ export function useVoiceRecorder() {
   // #endif
 
   function stop() {
-    if (!recording.value) return;
-    recording.value = false;
+    if (!recording.value) return Promise.resolve();
 
     // #ifdef MP-WEIXIN
     if (recorder) {
+      if (!stopPromise) {
+        stopPromise = new Promise((resolve) => {
+          resolveStop = resolve;
+          setTimeout(() => {
+            if (resolveStop) {
+              resolveStop();
+              resolveStop = null;
+              stopPromise = null;
+            }
+          }, 1500);
+        });
+      }
       try {
         recorder.stop();
       } catch (_) {}
-      recorder = null;
+      return stopPromise;
     }
+    return Promise.resolve();
     // #endif
 
     // #ifdef H5
+    recording.value = false;
     stopH5();
+    return Promise.resolve();
     // #endif
   }
 
@@ -166,5 +256,22 @@ export function useVoiceRecorder() {
     return sampleRate;
   }
 
-  return { recording, start, stop, getSampleRate };
+  function consumeStoppedAudio() {
+    const buffer = mpStoppedAudioBuffer;
+    mpStoppedAudioBuffer = null;
+    return buffer;
+  }
+
+  function getStoppedAudioMeta() {
+    return mpStoppedAudioMeta;
+  }
+
+  return {
+    recording,
+    start,
+    stop,
+    getSampleRate,
+    consumeStoppedAudio,
+    getStoppedAudioMeta,
+  };
 }

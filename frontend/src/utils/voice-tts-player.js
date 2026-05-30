@@ -133,11 +133,31 @@ export class VoiceTtsPlayer {
    */
   async pushChunk(base64Data, isLast = false) {
     if (!base64Data) {
+      if (isLast) {
+        this.streamEnded = true
+        // #ifdef H5
+        await this.flushQueue(true)
+        // #endif
+        // #ifdef MP-WEIXIN
+        await this.playAllMp()
+        // #endif
+        this.checkNotifyIdle()
+      }
       return false
     }
 
     const bytes = new Uint8Array(base64ToArrayBuffer(base64Data))
     if (!bytes.length) {
+      if (isLast) {
+        this.streamEnded = true
+        // #ifdef H5
+        await this.flushQueue(true)
+        // #endif
+        // #ifdef MP-WEIXIN
+        await this.playAllMp()
+        // #endif
+        this.checkNotifyIdle()
+      }
       return false
     }
 

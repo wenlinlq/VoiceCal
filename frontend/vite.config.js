@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 const manifestPath = path.resolve(__dirname, "src/manifest.json");
+const mpAppJsonPath = path.resolve(__dirname, "dist/dev/mp-weixin/app.json");
 
 function patchMpWeixinAppId(appId) {
   let originalContent = null;
@@ -54,11 +55,43 @@ function patchMpWeixinAppId(appId) {
   };
 }
 
+function stripInvalidMpPermissions() {
+  return {
+    name: "strip-invalid-mp-permissions",
+    closeBundle() {
+      if (!fs.existsSync(mpAppJsonPath)) return;
+      try {
+        const raw = fs.readFileSync(mpAppJsonPath, "utf-8");
+        const appJson = JSON.parse(raw);
+        if (appJson.permission?.["scope.record"]) {
+          delete appJson.permission["scope.record"];
+          if (!Object.keys(appJson.permission).length) {
+            delete appJson.permission;
+          }
+          fs.writeFileSync(mpAppJsonPath, `${JSON.stringify(appJson, null, 2)}\n`);
+        }
+      } catch (error) {
+        console.warn("[vite] strip invalid mp permissions failed", error);
+      }
+    },
+  };
+}
+
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
   const mpWeixinAppId = env.VITE_MP_WEIXIN_APPID || "";
+  const apiHost = env.VITE_API_HOST || "218.244.137.52";
+  const apiPort = env.VITE_API_PORT || "8000";
+  const apiUrl = env.VITE_API_URL || `http://${apiHost}:${apiPort}/api`;
+  const wsUrl = env.VITE_WS_URL || `ws://${apiHost}:${apiPort}/ws/voice`;
 
   return {
-    plugins: [patchMpWeixinAppId(mpWeixinAppId), uni()],
+    define: {
+      __VOICECAL_API_HOST__: JSON.stringify(apiHost),
+      __VOICECAL_API_PORT__: JSON.stringify(apiPort),
+      __VOICECAL_API_URL__: JSON.stringify(apiUrl),
+      __VOICECAL_WS_URL__: JSON.stringify(wsUrl),
+    },
+    plugins: [patchMpWeixinAppId(mpWeixinAppId), uni(), stripInvalidMpPermissions()],
   };
 });

@@ -71,6 +71,7 @@ async def test_create_and_list_events(client):
     assert data["code"] == 0
     assert data["data"]["title"] == "项目会议"
     assert data["data"]["user_id"] == TEST_OPENID_A
+    assert data["data"]["completed"] is False
     event_id = data["data"]["id"]
 
     resp = await client.get(
@@ -86,6 +87,7 @@ async def test_create_and_list_events(client):
     resp = await client.get(f"/api/events/{event_id}", headers=auth_header())
     assert resp.status_code == 200
     assert resp.json()["data"]["title"] == "项目会议"
+    assert resp.json()["data"]["completed"] is False
 
 
 @pytest.mark.asyncio
@@ -109,6 +111,69 @@ async def test_update_event(client):
     assert resp.status_code == 200
     data = resp.json()
     assert data["data"]["title"] == "改后的会议"
+
+
+@pytest.mark.asyncio
+async def test_update_event_completed_status(client):
+    resp = await client.post(
+        "/api/events",
+        json={
+            "title": "待完成会议",
+            "start_time": "2026-05-30T10:00:00",
+            "end_time": "2026-05-30T11:00:00",
+        },
+        headers=auth_header(),
+    )
+    event_id = resp.json()["data"]["id"]
+
+    resp = await client.put(
+        f"/api/events/{event_id}",
+        json={"completed": True},
+        headers=auth_header(),
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["data"]["completed"] is True
+
+
+@pytest.mark.asyncio
+async def test_completed_events_are_sorted_last(client):
+    await client.post(
+        "/api/events",
+        json={
+            "title": "已完成日程",
+            "start_time": "2026-05-30T08:00:00",
+            "end_time": "2026-05-30T09:00:00",
+            "completed": True,
+        },
+        headers=auth_header(),
+    )
+    await client.post(
+        "/api/events",
+        json={
+            "title": "未完成早间日程",
+            "start_time": "2026-05-30T07:00:00",
+            "end_time": "2026-05-30T08:00:00",
+        },
+        headers=auth_header(),
+    )
+    await client.post(
+        "/api/events",
+        json={
+            "title": "未完成上午日程",
+            "start_time": "2026-05-30T10:00:00",
+            "end_time": "2026-05-30T11:00:00",
+        },
+        headers=auth_header(),
+    )
+
+    resp = await client.get(
+        "/api/events?start=2026-05-30T00:00:00&end=2026-05-30T23:59:59",
+        headers=auth_header(),
+    )
+    assert resp.status_code == 200
+    titles = [e["title"] for e in resp.json()["data"]]
+    assert titles == ["未完成早间日程", "未完成上午日程", "已完成日程"]
 
 
 @pytest.mark.asyncio

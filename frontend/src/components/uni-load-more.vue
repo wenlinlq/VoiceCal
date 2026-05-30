@@ -40,7 +40,11 @@
 </template>
 
 <script>
-	const platform = uni.getSystemInfoSync().platform
+		const platform = (
+			typeof uni.getDeviceInfo === 'function'
+				? uni.getDeviceInfo()
+				: uni.getSystemInfoSync()
+		).platform
 	export default {
 		name: 'UniLoadMore',
 		props: {

@@ -107,3 +107,29 @@ async def wechat_login(req: WechatLoginRequest, db: AsyncSession = Depends(get_d
             "unionid": unionid,
         },
     )
+
+
+class DevLoginRequest(BaseModel):
+    openid: str = Field(..., description="测试用的 openid")
+
+
+@router.post("/dev-login", response_model=WechatLoginResponse)
+async def dev_login(req: DevLoginRequest, db: AsyncSession = Depends(get_db)):
+    """开发环境登录：直接传 openid，跳过微信 code2session。
+
+    仅开发/测试环境使用，生产环境应禁用。
+    """
+    if settings.app_env == "production":
+        from fastapi import HTTPException
+        raise HTTPException(status_code=403, detail="生产环境已禁用 dev-login")
+
+    logger.info("[开发登录] openid=%s", req.openid)
+
+    service = UserService(db)
+    await service.get_or_create(req.openid)
+
+    token = create_token(req.openid)
+    return WechatLoginResponse(
+        token=token,
+        user={"openid": req.openid},
+    )
