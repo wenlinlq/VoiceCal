@@ -8,6 +8,8 @@
         :reply-text="replyText"
         :error-text="errorText"
         :user-text="userText"
+        :need-confirm="needConfirm"
+        :query-listen-mode="queryListenMode"
         :visible="true"
         centered
       />
@@ -26,6 +28,8 @@ const props = defineProps({
   replyText: { type: String, default: '' },
   errorText: { type: String, default: '' },
   userText: { type: String, default: '' },
+  needConfirm: { type: Boolean, default: false },
+  queryListenMode: { type: Boolean, default: false },
 })
 
 const emit = defineEmits(['close'])
