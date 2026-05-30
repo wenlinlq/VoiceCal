@@ -1,3 +1,5 @@
+import base64
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -122,3 +124,111 @@ async def test_progress_reply_replaced_by_tool_confirmation(db_session):
         result = await svc.handle_text(db_session, "demo_user", "明天下午三点提醒我开组会。")
         assert "还要继续添加吗" in result["reply_text"]
         assert result["need_confirm"] is True
+
+
+@pytest.mark.asyncio
+async def test_streaming_speech_only_forwards_incremental_audio(db_session):
+    svc = CalendarAgentService()
+    chunk1 = b"\x01\x02" * 16
+    chunk2 = b"\x03\x04" * 8
+    chunk1_b64 = base64.b64encode(chunk1).decode()
+    chunk2_b64 = base64.b64encode(chunk2).decode()
+
+    class FakeSpeechAgent:
+        def register_instance_hook(self, hook_type, hook_name, hook):
+            self.post_print_hook = hook
+
+        async def __call__(self, user_msg):
+            msg = SimpleNamespace(id="msg-stream-1")
+            await self.post_print_hook(
+                self,
+                {
+                    "msg": msg,
+                    "last": False,
+                    "speech": {"source": {"type": "base64", "data": chunk1_b64}},
+                },
+                None,
+            )
+            await self.post_print_hook(
+                self,
+                {
+                    "msg": msg,
+                    "last": True,
+                    "speech": {"source": {"type": "base64", "data": chunk1_b64 + chunk2_b64}},
+                },
+                None,
+            )
+            return _make_mock_result("你好")
+
+    streamed = []
+
+    async def on_speech_chunk(chunk: bytes, is_last: bool):
+        streamed.append((chunk, is_last))
+
+    with patch("app.services.agent_service.ReActAgent", return_value=FakeSpeechAgent()):
+        result = await svc.handle_text(
+            db_session,
+            "demo_user",
+            "你好",
+            on_speech_chunk=on_speech_chunk,
+        )
+
+    assert result["speech_streamed"] is True
+    assert result["speech"] is None
+    assert streamed == [
+        (chunk1, False),
+        (chunk2, True),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_streaming_speech_emits_empty_last_marker_when_final_print_has_no_new_audio(db_session):
+    svc = CalendarAgentService()
+    chunk1 = b"\x01\x02" * 16
+    chunk1_b64 = base64.b64encode(chunk1).decode()
+
+    class FakeSpeechAgent:
+        def register_instance_hook(self, hook_type, hook_name, hook):
+            self.post_print_hook = hook
+
+        async def __call__(self, user_msg):
+            msg = SimpleNamespace(id="msg-stream-2")
+            await self.post_print_hook(
+                self,
+                {
+                    "msg": msg,
+                    "last": False,
+                    "speech": {"source": {"type": "base64", "data": chunk1_b64}},
+                },
+                None,
+            )
+            await self.post_print_hook(
+                self,
+                {
+                    "msg": msg,
+                    "last": True,
+                    "speech": {"source": {"type": "base64", "data": chunk1_b64}},
+                },
+                None,
+            )
+            return _make_mock_result("你好")
+
+    streamed = []
+
+    async def on_speech_chunk(chunk: bytes, is_last: bool):
+        streamed.append((chunk, is_last))
+
+    with patch("app.services.agent_service.ReActAgent", return_value=FakeSpeechAgent()):
+        result = await svc.handle_text(
+            db_session,
+            "demo_user",
+            "你好",
+            on_speech_chunk=on_speech_chunk,
+        )
+
+    assert result["speech_streamed"] is True
+    assert result["speech"] is None
+    assert streamed == [
+        (chunk1, False),
+        (b"", True),
+    ]

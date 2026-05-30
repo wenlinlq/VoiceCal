@@ -196,14 +196,130 @@ let currentSampleRate = 44100;  // 实际采样率，录音后更新
 let ttsChunks = [];  // {seq, data:Uint8Array}
 let ttsSampleRate = 24000;
 let connectPromise = null;
+let ttsPlaybackContext = null;
+let ttsPlaybackCursor = 0;
+let ttsActiveSources = new Set();
+let ttsPendingPlayQueue = [];
+let ttsQueuedSeconds = 0;
+let ttsPlaybackStarted = false;
+let ttsCurrentTurnIsLast = false;
+const ttsStartBufferSeconds = 0.45;
+const ttsResumeBufferSeconds = 0.25;
 
 const wsUrlInput = document.getElementById('wsUrl');
 const btnConnect = document.getElementById('btnConnect');
 const btnDisconnect = document.getElementById('btnDisconnect');
 const btnRecord = document.getElementById('btnRecord');
 const btnStop = document.getElementById('btnStop');
+const btnPlayAll = document.getElementById('btnPlayAll');
 const connStatus = document.getElementById('connStatus');
 const recordStatus = document.getElementById('recordStatus');
+const ttsStatus = document.getElementById('tts-status');
+
+async function ensureTtsPlaybackContext(fromUserGesture = false) {
+  if (!ttsPlaybackContext) {
+    ttsPlaybackContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: ttsSampleRate });
+  }
+  if (fromUserGesture && ttsPlaybackContext.state === 'suspended') {
+    await ttsPlaybackContext.resume();
+  }
+  return ttsPlaybackContext;
+}
+
+async function primeTtsPlayback() {
+  try {
+    await ensureTtsPlaybackContext(true);
+  } catch (error) {
+    log('预热 TTS 播放器失败: ' + error.message, 'error');
+  }
+}
+
+function stopTtsPlayback() {
+  for (const source of ttsActiveSources) {
+    try {
+      source.onended = null;
+      source.stop();
+    } catch (error) {}
+  }
+  ttsActiveSources.clear();
+  ttsPlaybackCursor = 0;
+}
+
+function resetTtsTurn() {
+  stopTtsPlayback();
+  ttsChunks = [];
+  ttsPendingPlayQueue = [];
+  ttsQueuedSeconds = 0;
+  ttsPlaybackStarted = false;
+  ttsCurrentTurnIsLast = false;
+  btnPlayAll.disabled = true;
+  ttsStatus.textContent = '等待 TTS 音频...';
+}
+
+function pcmBytesToAudioBuffer(audioCtx, bytes) {
+  const frameCount = Math.floor(bytes.byteLength / 2);
+  if (frameCount <= 0) return null;
+  const buffer = audioCtx.createBuffer(1, frameCount, ttsSampleRate);
+  const channelData = buffer.getChannelData(0);
+  const pcmView = new DataView(bytes.buffer, bytes.byteOffset, frameCount * 2);
+  for (let i = 0; i < frameCount; i++) {
+    channelData[i] = pcmView.getInt16(i * 2, true) / 32768.0;
+  }
+  return buffer;
+}
+
+async function flushTtsPlaybackQueue(auto = true) {
+  const audioCtx = await ensureTtsPlaybackContext(false);
+  if (audioCtx.state === 'suspended') {
+    ttsStatus.textContent = `已收到 ${ttsChunks.length} 个 chunk，等待手动解锁音频播放`;
+    return false;
+  }
+
+  const needsRestart = ttsPlaybackCursor <= audioCtx.currentTime + 0.02;
+  const minBufferSeconds = ttsPlaybackStarted ? ttsResumeBufferSeconds : ttsStartBufferSeconds;
+  if (!ttsCurrentTurnIsLast && ttsQueuedSeconds < minBufferSeconds && needsRestart) {
+    ttsStatus.textContent =
+      `TTS 缓冲中... ${ttsQueuedSeconds.toFixed(2)}s / ${minBufferSeconds.toFixed(2)}s`;
+    return false;
+  }
+
+  if (needsRestart) {
+    ttsPlaybackCursor = audioCtx.currentTime + 0.05;
+  }
+
+  while (ttsPendingPlayQueue.length > 0) {
+    const item = ttsPendingPlayQueue.shift();
+    const buffer = pcmBytesToAudioBuffer(audioCtx, item.bytes);
+    if (!buffer) {
+      continue;
+    }
+
+    ttsPlaybackStarted = true;
+    ttsQueuedSeconds = Math.max(0, ttsQueuedSeconds - buffer.duration);
+
+    const source = audioCtx.createBufferSource();
+    source.buffer = buffer;
+    source.connect(audioCtx.destination);
+
+    const startAt = Math.max(ttsPlaybackCursor, audioCtx.currentTime + 0.03);
+    ttsPlaybackCursor = startAt + buffer.duration;
+    ttsActiveSources.add(source);
+    source.onended = () => {
+      ttsActiveSources.delete(source);
+      if (item.isLast && ttsActiveSources.size === 0 && ttsPendingPlayQueue.length === 0) {
+        ttsStatus.textContent = 'TTS 播放完成';
+      }
+    };
+    source.start(startAt);
+
+    const waitMs = Math.max(0, Math.round((startAt - audioCtx.currentTime) * 1000));
+    ttsStatus.textContent =
+      `${auto ? '流式播放中' : '播放中'}... 已排队 ${ttsChunks.length} 个 chunk，剩余缓冲 ${ttsQueuedSeconds.toFixed(2)}s`;
+    log(`排队播放 TTS chunk #${item.index}, ${(buffer.duration).toFixed(2)}s, ${waitMs}ms 后开始`, 'tts');
+  }
+
+  return true;
+}
 
 // ============================================================
 // WebSocket
@@ -250,7 +366,7 @@ function attachWebSocketHandlers(socket) {
     try {
       const msg = JSON.parse(raw);
       try {
-        handleMessage(msg);
+        await handleMessage(msg);
       } catch (e) {
         log('处理消息异常: ' + (e && e.message ? e.message : String(e)), 'error');
         console.error('handleMessage error', e, msg);
@@ -334,9 +450,11 @@ function sendJson(obj) {
 // ============================================================
 // Text message
 // ============================================================
-function sendText() {
+async function sendText() {
   const text = document.getElementById('textInput').value.trim();
   if (!text) { log('请输入文本', 'error'); return; }
+  resetTtsTurn();
+  await primeTtsPlayback();
   sendJson({ type: 'text.message', session_id: sessionId, text: text });
 }
 
@@ -348,6 +466,8 @@ async function startSpeaking() {
   btnStop.disabled = true;
 
   try {
+    resetTtsTurn();
+    await primeTtsPlayback();
     log('点击开始说话', 'out');
     updateStatus('正在连接 WebSocket...');
 
@@ -462,11 +582,13 @@ function stopSpeaking() {
 // ============================================================
 // Audio: File upload → audio_start → chunks → audio_end
 // ============================================================
-function sendPcmFile() {
+async function sendPcmFile() {
   const fileInput = document.getElementById('pcmFile');
   const file = fileInput.files[0];
   if (!file) { log('请选择文件', 'error'); return; }
 
+  resetTtsTurn();
+  await primeTtsPlayback();
   const reader = new FileReader();
   reader.onload = (e) => {
     const bytes = new Uint8Array(e.target.result);
@@ -497,11 +619,15 @@ function sendPcmFile() {
 // ============================================================
 // Confirm
 // ============================================================
-function sendConfirm() {
+async function sendConfirm() {
+  resetTtsTurn();
+  await primeTtsPlayback();
   sendJson({ type: 'text.message', session_id: sessionId, text: '确认' });
   document.getElementById('confirm-box').style.display = 'none';
 }
-function sendCancel() {
+async function sendCancel() {
+  resetTtsTurn();
+  await primeTtsPlayback();
   sendJson({ type: 'text.message', session_id: sessionId, text: '取消' });
   document.getElementById('confirm-box').style.display = 'none';
 }
@@ -509,7 +635,7 @@ function sendCancel() {
 // ============================================================
 // Handle server messages
 // ============================================================
-function handleMessage(msg) {
+async function handleMessage(msg) {
   const t = msg.type;
 
   if (t === 'transcription') {
@@ -531,20 +657,38 @@ function handleMessage(msg) {
     }
   }
   else if (t === 'tts.chunk') {
-    // Decode base64 PCM → Uint8Array
     const binary = atob(msg.data);
     const bytes = new Uint8Array(binary.length);
     for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    ttsCurrentTurnIsLast = !!msg.is_last;
+    if (bytes.length === 0) {
+      log(`收到 tts_audio end marker${msg.is_last ? ' last' : ''}`, 'tts');
+      if (msg.is_last) {
+        ttsStatus.textContent = 'TTS 音频接收完成';
+      }
+      return;
+    }
+
     ttsChunks.push(bytes);
 
     const total = ttsChunks.reduce((s, c) => s + c.length, 0);
-    document.getElementById('tts-status').textContent =
+    const durationSeconds = bytes.byteLength / 2 / ttsSampleRate;
+    ttsPendingPlayQueue.push({
+      bytes,
+      isLast: !!msg.is_last,
+      index: ttsChunks.length,
+      durationSeconds,
+    });
+    ttsQueuedSeconds += durationSeconds;
+    ttsStatus.textContent =
       `收到 chunk #${ttsChunks.length}, pcm=${bytes.length}B, 累计=${total}B` + (msg.is_last ? ' (最后)' : '');
 
     log(`收到 tts_audio: ${bytes.length}B${msg.is_last ? ' last' : ''}`, 'tts');
+    btnPlayAll.disabled = false;
 
-    if (msg.is_last) {
-      document.getElementById('btnPlayAll').disabled = false;
+    const played = await flushTtsPlaybackQueue(true);
+    if (!played && msg.is_last) {
+      log('浏览器未自动解锁音频，请手动点击“播放本轮语音”', 'error');
     }
   }
   else if (t === 'turn.done') {
@@ -561,10 +705,15 @@ function handleMessage(msg) {
 // ============================================================
 // TTS Playback: PCM (24kHz 16bit mono) → WAV → Audio
 // ============================================================
-function playAllTts() {
+async function playAllTts(auto = false) {
   if (ttsChunks.length === 0) { log('没有 TTS 音频数据', 'error'); return; }
 
-  // Merge all PCM chunks
+  await ensureTtsPlaybackContext(true);
+  stopTtsPlayback();
+  ttsPendingPlayQueue = [];
+  ttsQueuedSeconds = 0;
+  ttsPlaybackStarted = false;
+
   const totalLen = ttsChunks.reduce((s, c) => s + c.length, 0);
   const merged = new Uint8Array(totalLen);
   let offset = 0;
@@ -573,30 +722,28 @@ function playAllTts() {
     offset += chunk.length;
   }
 
-  // PCM to float32 for AudioContext
-  const sampleRate = ttsSampleRate;
-  const audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate });
-  const int16View = new Int16Array(merged.buffer);
-  const numSamples = int16View.length;
-  const buffer = audioCtx.createBuffer(1, numSamples, sampleRate);
-  const channelData = buffer.getChannelData(0);
-  for (let i = 0; i < numSamples; i++) {
-    channelData[i] = int16View[i] / 32768.0;
-  }
+  const audioCtx = ttsPlaybackContext;
+  const buffer = pcmBytesToAudioBuffer(audioCtx, merged);
+  if (!buffer) { log('TTS 音频为空', 'error'); return; }
 
   const source = audioCtx.createBufferSource();
   source.buffer = buffer;
   source.connect(audioCtx.destination);
-  source.start(0);
+  const startAt = audioCtx.currentTime + 0.03;
+  ttsPlaybackCursor = startAt + buffer.duration;
+  ttsActiveSources.add(source);
+  source.onended = () => {
+    ttsActiveSources.delete(source);
+    if (ttsActiveSources.size === 0) {
+      ttsStatus.textContent = 'TTS 播放完成';
+    }
+  };
+  source.start(startAt);
 
-  document.getElementById('tts-status').textContent =
-    `播放中... ${numSamples} samples @ ${sampleRate}Hz`;
+  ttsStatus.textContent =
+    `${auto ? '自动播放中' : '播放中'}... ${(buffer.duration).toFixed(2)}s @ ${ttsSampleRate}Hz`;
 
-  log(`播放 TTS: ${numSamples} samples, ${(numSamples / sampleRate).toFixed(1)}s`, 'tts');
-
-  // Reset for next turn
-  ttsChunks = [];
-  document.getElementById('btnPlayAll').disabled = true;
+  log(`播放整轮 TTS: ${(buffer.duration).toFixed(2)}s`, 'tts');
 }
 
 // ============================================================
