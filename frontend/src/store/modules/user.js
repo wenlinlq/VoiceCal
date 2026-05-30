@@ -60,7 +60,7 @@ export const useUserStore = defineStore("user", {
       this.backendReady = Boolean(info.backendReady);
       this.platform = info.platform || "";
       this.silent = info.silent !== false;
-      this.isLoggedIn = Boolean(this.openid || this.code || this.token);
+      this.isLoggedIn = Boolean(this.token);
       this.loginError = "";
     },
 
@@ -76,6 +76,14 @@ export const useUserStore = defineStore("user", {
       this.applyLoginInfo(info);
       setCachedLoginInfo(this.loginInfo);
       return this.loginInfo;
+    },
+
+    /** 确保已拿到 JWT（启动时调用） */
+    async ensureAuth() {
+      if (this.token) {
+        return this.loginInfo;
+      }
+      return this.silentLogin();
     },
 
     clearLogin() {

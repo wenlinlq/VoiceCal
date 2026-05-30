@@ -1,4 +1,5 @@
 import { API_BASE_URL } from "@/config/api.js";
+import { getAuthToken } from "@/utils/auth.js";
 
 /**
  * 统一 HTTP 请求
@@ -8,25 +9,60 @@ import { API_BASE_URL } from "@/config/api.js";
  * @param {object} [options.data] 请求体
  * @param {object} [options.query] 查询参数
  * @param {boolean} [options.raw] 为 true 时直接返回响应体（用于 /agent/text）
+ * @param {boolean} [options.skipAuth] 为 true 时不附带 Authorization（登录、健康检查）
+ * @param {boolean} [options.authResponse] 为 true 时解析 { token, user } 登录响应体
  */
-export function request({ url, method = "GET", data, query, raw = false }) {
+export function request({
+  url,
+  method = "GET",
+  data,
+  query,
+  raw = false,
+  skipAuth = false,
+  authResponse = false,
+}) {
   const fullUrl = buildUrl(url, query);
+  const headers = { "Content-Type": "application/json" };
+
+  if (!skipAuth) {
+    const token = getAuthToken();
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+  }
 
   return new Promise((resolve, reject) => {
     uni.request({
       url: fullUrl,
       method,
       data,
-      header: {
-        "Content-Type": "application/json",
-      },
+      header: headers,
       success: (res) => {
+        if (res.statusCode === 401) {
+          reject(new Error(res.data?.detail || "未授权，请重新登录"));
+          return;
+        }
+
         if (res.statusCode < 200 || res.statusCode >= 300) {
-          reject(new Error(`HTTP ${res.statusCode}`));
+          const msg =
+            res.data?.detail ||
+            res.data?.message ||
+            `HTTP ${res.statusCode}`;
+          reject(new Error(msg));
           return;
         }
 
         const body = res.data;
+
+        if (authResponse) {
+          if (body?.token) {
+            resolve(body);
+            return;
+          }
+          reject(new Error("登录响应缺少 token"));
+          return;
+        }
+
         if (raw) {
           resolve(body);
           return;

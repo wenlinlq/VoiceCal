@@ -4,7 +4,7 @@ import { useCalendarStore } from "@/store/modules/calendar.js";
 import { useConfirmStore } from "@/store/modules/confirm.js";
 import { useVoiceRecorder } from "@/composables/useVoiceRecorder.js";
 import { createVoiceWsClient } from "@/composables/useVoiceWsClient.js";
-import { DEFAULT_USER_ID } from "@/config/api.js";
+import { useUserStore } from "@/store/modules/user.js";
 import { detectSound, detectSoundFloat } from "@/utils/audio.js";
 
 const RECORD_SILENCE_MS = 3000;
@@ -47,8 +47,8 @@ function createSessionId() {
   return `s_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function getUserId() {
-  return DEFAULT_USER_ID;
+function getAuthToken() {
+  return useUserStore().token || "";
 }
 
 function stopSilenceWatch() {
@@ -220,11 +220,7 @@ export function useVoiceInteraction() {
       hasSpoken = true;
       lastSoundAt = Date.now();
       sentChunkCount = 0;
-      voiceWs.sendAudioStart(
-        voiceStore.sessionId,
-        recordingSampleRate,
-        getUserId(),
-      );
+      voiceWs.sendAudioStart(voiceStore.sessionId, recordingSampleRate);
     }
 
     if (!audioStreamStarted) return;
@@ -235,7 +231,7 @@ export function useVoiceInteraction() {
       lastSoundAt = Date.now();
     }
 
-    voiceWs.sendAudioChunk(voiceStore.sessionId, frameBuffer, getUserId());
+    voiceWs.sendAudioChunk(voiceStore.sessionId, frameBuffer);
   }
 
   function startSilenceWatch(isAutoListen) {
@@ -319,13 +315,13 @@ export function useVoiceInteraction() {
     sentChunkCount = 0;
 
     try {
-      await voiceWs.ensureConnected(getUserId());
+      await voiceWs.ensureConnected(getAuthToken());
     } catch (err) {
       voiceStore.setError("语音连接已断开");
       return;
     }
 
-    voiceWs.sendText(voiceStore.sessionId, NO_VOICE_NUDGE_TEXT, getUserId());
+    voiceWs.sendText(voiceStore.sessionId, NO_VOICE_NUDGE_TEXT);
     voiceStore.setStatus(VOICE_STATUS.THINKING);
   }
 
@@ -350,7 +346,6 @@ export function useVoiceInteraction() {
     const sent = voiceWs.sendAudioEnd(
       voiceStore.sessionId,
       recordingSampleRate,
-      getUserId(),
     );
 
     if (!sent) {
@@ -385,16 +380,12 @@ export function useVoiceInteraction() {
     }
 
     try {
-      await voiceWs.ensureConnected(getUserId());
+      await voiceWs.ensureConnected(getAuthToken());
       recordingSampleRate = await voiceRecorder.start(onAudioFrame);
 
       if (!isAuto) {
         audioStreamStarted = true;
-        voiceWs.sendAudioStart(
-          voiceStore.sessionId,
-          recordingSampleRate,
-          getUserId(),
-        );
+        voiceWs.sendAudioStart(voiceStore.sessionId, recordingSampleRate);
       }
 
       startSilenceWatch(isAuto);
@@ -414,7 +405,7 @@ export function useVoiceInteraction() {
     try {
       voiceWs.resetTtsTurn();
       await voiceWs.primeTts(true);
-      await voiceWs.ensureConnected(getUserId());
+      await voiceWs.ensureConnected(getAuthToken());
     } catch (err) {
       console.error("[voice] ws connect fail", err);
       uni.showToast({ title: "无法连接语音服务", icon: "none" });
@@ -466,14 +457,14 @@ export function useVoiceInteraction() {
     voiceStore.needConfirm = false;
 
     try {
-      await voiceWs.ensureConnected(getUserId());
+      await voiceWs.ensureConnected(getAuthToken());
     } catch (err) {
       voiceStore.setError("语音连接已断开");
       return;
     }
 
     await voiceWs.primeTts(false);
-    const sent = voiceWs.sendText(voiceStore.sessionId, text, getUserId());
+    const sent = voiceWs.sendText(voiceStore.sessionId, text);
     if (!sent) {
       voiceStore.setError("语音连接已断开");
       return;
@@ -498,13 +489,13 @@ export function useVoiceInteraction() {
 
     try {
       await voiceWs.primeTts(true);
-      await voiceWs.ensureConnected(getUserId());
+      await voiceWs.ensureConnected(getAuthToken());
     } catch (err) {
       uni.showToast({ title: "无法连接语音服务", icon: "none" });
       return;
     }
 
-    voiceWs.sendText(voiceStore.sessionId, text.trim(), getUserId());
+    voiceWs.sendText(voiceStore.sessionId, text.trim());
     voiceStore.setStatus(VOICE_STATUS.THINKING);
   }
 

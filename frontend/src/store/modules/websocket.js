@@ -11,9 +11,15 @@ function getInitialWsUrl() {
   }
 }
 
-function buildWsUrl(base, userId) {
-  const sep = base.includes("?") ? "&" : "?";
-  return `${base}${sep}user_id=${encodeURIComponent(userId)}`;
+/** 去掉已有 query，避免重复拼接 */
+function stripQuery(url) {
+  const idx = url.indexOf("?");
+  return idx >= 0 ? url.slice(0, idx) : url;
+}
+
+function buildWsUrl(base, token) {
+  const root = stripQuery(base);
+  return `${root}?token=${encodeURIComponent(token)}`;
 }
 
 export const useWebSocketStore = defineStore("websocket", {
@@ -46,7 +52,11 @@ export const useWebSocketStore = defineStore("websocket", {
       this.setServerUrl(WS_BASE_URL);
     },
 
-    connect(userId = "demo_user") {
+    connect(token) {
+      if (!token) {
+        return Promise.reject(new Error("未登录，无法连接语音服务"));
+      }
+
       if (this.connected && this.socketTask) {
         return Promise.resolve();
       }
@@ -65,7 +75,7 @@ export const useWebSocketStore = defineStore("websocket", {
         });
       }
 
-      const url = buildWsUrl(this.serverUrl, userId);
+      const url = buildWsUrl(this.serverUrl, token);
 
       return new Promise((resolve, reject) => {
         this.connecting = true;
