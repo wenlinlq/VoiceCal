@@ -39,7 +39,12 @@
     <view class="year-body" @touchstart="onTouchStart" @touchend="onTouchEnd">
       <view class="slide-viewport">
         <view v-if="!yearSlide.active" class="slide-stage">
-          <scroll-view scroll-y class="year-scroll" :show-scrollbar="false">
+          <scroll-view
+            scroll-y
+            enable-flex
+            class="year-scroll"
+            :show-scrollbar="false"
+          >
             <view class="months-grid">
               <MiniMonthCard
                 v-for="m in 12"
@@ -63,7 +68,12 @@
             class="year-panel is-leaving"
             :class="`dir-${yearSlide.direction}`"
           >
-            <scroll-view scroll-y class="year-scroll" :show-scrollbar="false">
+            <scroll-view
+              scroll-y
+              enable-flex
+              class="year-scroll"
+              :show-scrollbar="false"
+            >
               <view class="months-grid">
                 <MiniMonthCard
                   v-for="m in 12"
@@ -82,7 +92,12 @@
             class="year-panel is-entering"
             :class="[`dir-${yearSlide.direction}`, { run: yearSlide.run }]"
           >
-            <scroll-view scroll-y class="year-scroll" :show-scrollbar="false">
+            <scroll-view
+              scroll-y
+              enable-flex
+              class="year-scroll"
+              :show-scrollbar="false"
+            >
               <view class="months-grid">
                 <MiniMonthCard
                   v-for="m in 12"

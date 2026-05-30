@@ -185,13 +185,19 @@
 
 .year-scroll {
   height: calc(100vh - 280rpx - env(safe-area-inset-top));
+  /* 配合 scroll-view enable-flex，避免子级被拉成单列 */
+  display: flex;
+  flex-direction: column;
 }
 
 .months-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0 16rpx;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  column-gap: 16rpx;
+  row-gap: 24rpx;
+  width: 100%;
   padding: 0 32rpx 32rpx;
+  box-sizing: border-box;
 }
 
 .year-panel {

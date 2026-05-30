@@ -28,10 +28,11 @@ defineEmits(['select'])
 
 <style lang="scss" scoped>
 .mini-month-card {
-  width: calc((100% - 32rpx) / 3);
-  margin-bottom: 24rpx;
+  width: 100%;
+  min-width: 0;
   padding: 8rpx 4rpx 12rpx;
   border-radius: 12rpx;
+  box-sizing: border-box;
 
   &:active {
     background: #f5f9ff;

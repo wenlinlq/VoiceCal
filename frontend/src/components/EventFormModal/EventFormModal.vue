@@ -3,7 +3,7 @@
   <Teleport to="body">
     <div v-if="mounted" class="form-overlay" :class="{ active }">
       <div class="form-mask" @click="onClose" />
-      <div class="form-dialog" @click="closeRepeatMenu">
+      <div class="form-dialog" @click="closeMenus">
         <div class="form-header">
           <span class="form-title">{{ formTitle }}</span>
           <div class="close-btn" @click="onClose">
@@ -11,7 +11,8 @@
           </div>
         </div>
 
-        <div class="form-body">
+        <div class="form-body-wrap">
+          <div class="form-body-scroll">
           <div class="form-item">
             <label class="form-label">标题</label>
             <input
@@ -48,6 +49,36 @@
             </div>
           </div>
 
+          <div class="time-row all-day-row">
+            <span class="time-label">日程提醒</span>
+            <switch
+              :checked="form.remind_enabled"
+              color="#1a73e8"
+              @change="onRemindChange"
+            />
+          </div>
+          <div v-if="form.remind_enabled" class="form-item remind-item">
+            <label class="form-label">提前提醒</label>
+            <div class="repeat-field" @click.stop>
+              <div class="form-picker" @click.stop="toggleRemindMenu">
+                <span>{{ remindBeforeLabel }}</span>
+                <span class="picker-arrow">▾</span>
+              </div>
+              <div v-if="remindMenuOpen" class="repeat-dropdown">
+                <div
+                  v-for="opt in remindBeforeOptions"
+                  :key="opt.value"
+                  class="repeat-option"
+                  :class="{ active: form.remind_before_minutes === opt.value }"
+                  @click.stop="selectRemindBefore(opt.value)"
+                >
+                  {{ opt.label }}
+                </div>
+              </div>
+            </div>
+          </div>
+          <p v-if="form.remind_enabled" class="remind-hint">保存时将请求微信订阅消息授权</p>
+
           <div class="form-item repeat-item">
             <label class="form-label">重复</label>
             <div class="repeat-field" @click.stop>
@@ -78,6 +109,7 @@
               maxlength="200"
               rows="3"
             />
+          </div>
           </div>
         </div>
 
@@ -111,7 +143,15 @@
         </view>
       </view>
 
-      <view class="form-body">
+      <view class="form-body-wrap">
+        <scroll-view
+          scroll-y
+          enhanced
+          :show-scrollbar="false"
+          :bounces="false"
+          class="form-body-scroll"
+        >
+        <view class="form-scroll-content">
         <view class="form-item">
           <text class="form-label">标题</text>
           <input
@@ -148,6 +188,27 @@
           </view>
         </view>
 
+        <view class="time-row all-day-row">
+          <text class="time-label">日程提醒</text>
+          <switch
+            :checked="form.remind_enabled"
+            color="#1a73e8"
+            @change="onRemindChange"
+          />
+        </view>
+        <view v-if="form.remind_enabled" class="form-item">
+          <text class="form-label">提前提醒</text>
+          <picker
+            :range="remindBeforeOptions"
+            range-key="label"
+            :value="remindBeforeIndex"
+            @change="onRemindBeforeChange"
+          >
+            <view class="form-picker">{{ remindBeforeLabel }}</view>
+          </picker>
+        </view>
+        <text v-if="form.remind_enabled" class="remind-hint">保存时将请求微信订阅消息授权</text>
+
         <view class="form-item">
           <text class="form-label">重复</text>
           <picker
@@ -170,6 +231,8 @@
             :auto-height="true"
           />
         </view>
+        </view>
+        </scroll-view>
       </view>
 
       <view class="form-actions">
@@ -205,6 +268,13 @@ import {
   parseDateTime
 } from '@/utils/date.js'
 import DateTimePicker from '@/components/DateTimePicker/DateTimePicker.vue'
+import {
+  REMIND_BEFORE_OPTIONS,
+  DEFAULT_REMIND_BEFORE_MINUTES,
+  computeRemindAt,
+  inferRemindBeforeMinutes,
+  getRemindBeforeLabel,
+} from '@/utils/remind-options.js'
 
 const props = defineProps({
   visible: { type: Boolean, default: false },
@@ -228,7 +298,9 @@ const form = reactive({
   endDateTime: '',
   is_all_day: false,
   repeat_type: 'none',
-  note: ''
+  note: '',
+  remind_enabled: false,
+  remind_before_minutes: DEFAULT_REMIND_BEFORE_MINUTES,
 })
 
 const ANIM_DURATION = 320
@@ -236,6 +308,8 @@ const ANIM_DURATION = 320
 const mounted = ref(false)
 const active = ref(false)
 const repeatMenuOpen = ref(false)
+const remindMenuOpen = ref(false)
+const remindBeforeOptions = REMIND_BEFORE_OPTIONS
 const pickerVisible = ref(false)
 const pickerTarget = ref('start')
 
@@ -249,6 +323,21 @@ const repeatIndex = computed(() => {
 const repeatLabel = computed(() => {
   return repeatOptions[repeatIndex.value]?.label || '不重复'
 })
+
+const remindBeforeIndex = computed(() => {
+  const idx = remindBeforeOptions.findIndex(
+    (o) => o.value === form.remind_before_minutes,
+  )
+  if (idx >= 0) return idx
+  const defaultIdx = remindBeforeOptions.findIndex(
+    (o) => o.value === DEFAULT_REMIND_BEFORE_MINUTES,
+  )
+  return defaultIdx >= 0 ? defaultIdx : 0
+})
+
+const remindBeforeLabel = computed(() =>
+  getRemindBeforeLabel(form.remind_before_minutes),
+)
 
 const formTitle = computed(() =>
   props.mode === 'edit' ? '编辑日程' : '新建日程'
@@ -296,6 +385,7 @@ watch(
     } else if (mounted.value) {
       active.value = false
       repeatMenuOpen.value = false
+      remindMenuOpen.value = false
       pickerVisible.value = false
       hideTimer = setTimeout(() => {
         mounted.value = false
@@ -325,6 +415,8 @@ function resetForm() {
   form.is_all_day = false
   form.repeat_type = 'none'
   form.note = ''
+  form.remind_enabled = false
+  form.remind_before_minutes = DEFAULT_REMIND_BEFORE_MINUTES
 }
 
 function loadForm() {
@@ -335,6 +427,15 @@ function loadForm() {
     form.is_all_day = Boolean(props.eventData.is_all_day)
     form.repeat_type = props.eventData.repeat_type || 'none'
     form.note = props.eventData.note || ''
+    form.remind_enabled = Boolean(props.eventData.remind_enabled)
+    if (form.remind_enabled && props.eventData.remind_at) {
+      form.remind_before_minutes = inferRemindBeforeMinutes(
+        form.startDateTime,
+        props.eventData.remind_at,
+      )
+    } else {
+      form.remind_before_minutes = DEFAULT_REMIND_BEFORE_MINUTES
+    }
     if (form.is_all_day) {
       applyAllDayTimes()
     }
@@ -367,6 +468,12 @@ function restoreTimedDefaults() {
   }
 }
 
+function onRemindChange(e) {
+  const checked =
+    e?.detail?.value !== undefined ? Boolean(e.detail.value) : !form.remind_enabled
+  form.remind_enabled = checked
+}
+
 function onAllDayChange(e) {
   const checked = e?.detail?.value !== undefined
     ? Boolean(e.detail.value)
@@ -383,8 +490,28 @@ function onRepeatChange(e) {
   form.repeat_type = repeatOptions[e.detail.value].value
 }
 
+function toggleRemindMenu() {
+  remindMenuOpen.value = !remindMenuOpen.value
+  repeatMenuOpen.value = false
+}
+
+function closeRemindMenu() {
+  remindMenuOpen.value = false
+}
+
+function selectRemindBefore(value) {
+  form.remind_before_minutes = value
+  remindMenuOpen.value = false
+}
+
+function onRemindBeforeChange(e) {
+  const opt = remindBeforeOptions[e.detail.value]
+  if (opt) form.remind_before_minutes = opt.value
+}
+
 function openPicker(target) {
   closeRepeatMenu()
+  closeRemindMenu()
   pickerTarget.value = target
   pickerVisible.value = true
 }
@@ -432,10 +559,16 @@ function onPickerConfirm(value) {
 
 function toggleRepeatMenu() {
   repeatMenuOpen.value = !repeatMenuOpen.value
+  remindMenuOpen.value = false
 }
 
 function closeRepeatMenu() {
   repeatMenuOpen.value = false
+}
+
+function closeMenus() {
+  closeRepeatMenu()
+  closeRemindMenu()
 }
 
 function selectRepeat(value) {
@@ -455,6 +588,16 @@ function onSave() {
   if (form.is_all_day) {
     applyAllDayTimes()
   }
+  if (form.remind_enabled) {
+    const remindAt = computeRemindAt(
+      form.startDateTime,
+      form.remind_before_minutes,
+    )
+    if (parseDateTime(remindAt) >= parseDateTime(form.startDateTime)) {
+      uni.showToast({ title: '提醒时间需早于日程开始', icon: 'none' })
+      return
+    }
+  }
   emit('save', {
     ...(props.mode === 'edit' && props.eventData ? { id: props.eventData.id } : {}),
     title: form.title.trim(),
@@ -462,7 +605,11 @@ function onSave() {
     end_time: form.endDateTime,
     is_all_day: form.is_all_day,
     repeat_type: form.repeat_type,
-    note: form.note.trim()
+    note: form.note.trim(),
+    remind_enabled: form.remind_enabled,
+    remind_before_minutes: form.remind_enabled
+      ? form.remind_before_minutes
+      : undefined,
   })
 }
 </script>
@@ -494,11 +641,16 @@ function onSave() {
   right: 0;
   bottom: 0;
   z-index: 1;
+  display: flex;
+  flex-direction: column;
   width: 100%;
+  height: 75vh;
+  max-height: 75vh;
   background: #fff;
   border-radius: 16px 16px 0 0;
-  padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
+  padding: 16px 16px 0;
   box-sizing: border-box;
+  overflow: hidden;
   transform: translateY(100%);
   transition: transform 0.32s cubic-bezier(0.25, 0.8, 0.25, 1);
 }
@@ -509,6 +661,7 @@ function onSave() {
 
 .form-header {
   display: flex;
+  flex-shrink: 0;
   align-items: center;
   justify-content: space-between;
   margin-bottom: 16px;
@@ -532,7 +685,30 @@ function onSave() {
   cursor: pointer;
 }
 
-.form-body {
+.form-body-wrap {
+  flex: 1;
+  min-height: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+.form-body-scroll {
+  height: 100%;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+
+  &::-webkit-scrollbar {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
+    background: transparent !important;
+  }
+}
+
+.form-body-scroll .form-scroll-content,
+.form-body-scroll {
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -613,6 +789,15 @@ function onSave() {
   }
 }
 
+.remind-hint {
+  display: block;
+  font-size: 12px;
+  color: #888;
+  line-height: 1.5;
+  margin: -4px 0 4px;
+  padding: 0 2px;
+}
+
 .time-label {
   flex-shrink: 0;
   font-size: 16px;
@@ -683,8 +868,10 @@ function onSave() {
 
 .form-actions {
   display: flex;
+  flex-shrink: 0;
   gap: 12px;
-  margin-top: 20px;
+  margin-top: 16px;
+  padding-bottom: calc(16px + env(safe-area-inset-bottom));
 }
 
 .btn {
@@ -713,8 +900,10 @@ function onSave() {
 
 /* #ifndef H5 */
 .form-dialog {
+  height: 75vh;
+  max-height: 75vh;
   border-radius: 32rpx 32rpx 0 0;
-  padding: 32rpx 32rpx calc(32rpx + env(safe-area-inset-bottom));
+  padding: 32rpx 32rpx 0;
 }
 
 .form-header {
@@ -734,8 +923,22 @@ function onSave() {
   font-size: 28rpx;
 }
 
-.form-body {
+.form-body-wrap {
+  flex: 1;
+  min-height: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+.form-body-scroll {
+  height: 100%;
+}
+
+.form-scroll-content {
+  display: flex;
+  flex-direction: column;
   gap: 24rpx;
+  padding-bottom: 8rpx;
 }
 
 .form-item {
@@ -780,7 +983,8 @@ function onSave() {
 
 .form-actions {
   gap: 24rpx;
-  margin-top: 40rpx;
+  margin-top: 24rpx;
+  padding-bottom: calc(32rpx + env(safe-area-inset-bottom));
 }
 
 .btn {
