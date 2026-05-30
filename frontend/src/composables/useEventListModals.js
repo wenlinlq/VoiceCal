@@ -1,5 +1,9 @@
 import { ref } from "vue";
 import { useCalendarStore } from "@/store/modules/calendar.js";
+import {
+  prepareEventForSave,
+  getRemindSuccessHint,
+} from "@/utils/mp-subscribe-message.js";
 
 export function useEventListModals() {
   const calendarStore = useCalendarStore();
@@ -21,10 +25,18 @@ export function useEventListModals() {
   async function saveEdit(data) {
     if (!editingEvent.value) return;
     try {
-      await calendarStore.updateEvent({ id: editingEvent.value.id, ...data });
+      const prepared = await prepareEventForSave(data);
+      const updated = await calendarStore.updateEvent({
+        id: editingEvent.value.id,
+        ...prepared,
+      });
       showEditForm.value = false;
       editingEvent.value = null;
-      uni.showToast({ title: "已保存", icon: "success" });
+      uni.showToast({
+        title: `已保存${getRemindSuccessHint(updated)}`,
+        icon: "success",
+        duration: prepared.remind_enabled ? 2800 : 1500,
+      });
     } catch (error) {
       uni.showToast({ title: error.message || "保存失败", icon: "none" });
     }
@@ -53,7 +65,14 @@ export function useEventListModals() {
   }
 
   async function toggleComplete(event) {
-    await calendarStore.toggleEventComplete(event.id);
+    try {
+      await calendarStore.toggleEventComplete(event.id);
+    } catch (error) {
+      uni.showToast({
+        title: error.message || "更新完成状态失败",
+        icon: "none",
+      });
+    }
   }
 
   return {

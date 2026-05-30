@@ -1,6 +1,10 @@
 <template>
   <view class="page-day-events page-shell">
-    <view class="page-slide" :class="{ active: pageActive, leaving: pageLeaving }" :style="pageBottomStyle">
+    <view
+      class="page-slide"
+      :class="{ active: pageActive, leaving: pageLeaving }"
+      :style="pageBottomStyle"
+    >
       <view class="nav-bar" :style="navBarStyle">
         <view class="nav-back" @tap="goBack">
           <text class="back-icon">‹</text>
@@ -11,11 +15,7 @@
       </view>
 
       <scroll-view scroll-y class="event-scroll" :show-scrollbar="false">
-        <EventItemsList
-          :events="events"
-          show-note
-          @item-click="onEventClick"
-        />
+        <EventItemsList :events="events" show-note @item-click="onEventClick" />
       </scroll-view>
 
       <GlobalVoice />
@@ -31,6 +31,7 @@ import { formatDisplayDate } from "@/utils/date.js";
 import { usePageSlideNav } from "@/composables/usePageSlideNav.js";
 import { useMpSafeArea } from "@/composables/useMpSafeArea.js";
 import EventItemsList from "@/components/EventItemsList/EventItemsList.vue";
+import { sortEvents } from "@/utils/event-sort.js";
 import GlobalVoice from "@/components/GlobalVoice/GlobalVoice.vue";
 
 const { pageActive, pageLeaving, goBack, ANIM_DURATION } = usePageSlideNav({
@@ -43,9 +44,9 @@ const date = ref("");
 
 const events = computed(() => {
   if (!date.value) return [];
-  return calendarStore.events
-    .filter((e) => e.start_time.startsWith(date.value))
-    .sort((a, b) => a.start_time.localeCompare(b.start_time));
+  return sortEvents(
+    calendarStore.events.filter((e) => e.start_time.startsWith(date.value)),
+  );
 });
 
 const pageTitle = computed(() => {
