@@ -82,80 +82,80 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
-import { useWebSocketStore } from '@/store/modules/websocket.js'
-import { useMpSafeArea } from '@/composables/useMpSafeArea.js'
-import { API_BASE_URL } from '@/config/api.js'
-import GlobalVoice from '@/components/GlobalVoice/GlobalVoice.vue'
+import { ref } from "vue";
+import { useWebSocketStore } from "@/store/modules/websocket.js";
+import { useMpSafeArea } from "@/composables/useMpSafeArea.js";
+import { API_BASE_URL } from "@/config/api.js";
+import GlobalVoice from "@/components/GlobalVoice/GlobalVoice.vue";
 
-const wsStore = useWebSocketStore()
-const { pageBottomStyle } = useMpSafeArea()
-const wsUrl = ref(wsStore.serverUrl)
-const apiUrl = API_BASE_URL
-const micStatusText = ref('点击检查权限')
+const wsStore = useWebSocketStore();
+const { pageBottomStyle } = useMpSafeArea();
+const wsUrl = ref(wsStore.serverUrl);
+const apiUrl = API_BASE_URL;
+const micStatusText = ref("点击检查权限");
 
 const guideItems = [
-  '「明天下午3点开会」— 添加日程',
-  '「今天有什么安排」— 查看今日事件',
-  '「删除今天下午3点的会」— 删除事件',
-  '「把明天的会改到后天」— 修改事件'
-]
+  "「明天下午3点开会」— 添加日程",
+  "「今天有什么安排」— 查看今日事件",
+  "「删除今天下午3点的会」— 删除事件",
+  "「把明天的会改到后天」— 修改事件",
+];
 
 function checkMicPermission() {
   // #ifdef MP-WEIXIN
   uni.authorize({
-    scope: 'scope.record',
+    scope: "scope.record",
     success: () => {
-      micStatusText.value = '已授权'
-      uni.showToast({ title: '麦克风已授权', icon: 'success' })
+      micStatusText.value = "已授权";
+      uni.showToast({ title: "麦克风已授权", icon: "success" });
     },
     fail: () => {
-      micStatusText.value = '未授权'
+      micStatusText.value = "未授权";
       uni.showModal({
-        title: '需要麦克风权限',
-        content: '请在设置中开启麦克风权限，以便使用语音功能',
-        confirmText: '去设置',
+        title: "需要麦克风权限",
+        content: "请在设置中开启麦克风权限，以便使用语音功能",
+        confirmText: "去设置",
         success: (res) => {
-          if (res.confirm) uni.openSetting()
-        }
-      })
-    }
-  })
+          if (res.confirm) uni.openSetting();
+        },
+      });
+    },
+  });
   // #endif
   // #ifdef H5
-  micStatusText.value = 'H5 需 HTTPS 环境'
-  uni.showToast({ title: 'H5 环境需 HTTPS', icon: 'none' })
+  micStatusText.value = "H5 需 HTTPS 环境";
+  uni.showToast({ title: "H5 环境需 HTTPS", icon: "none" });
   // #endif
   // #ifndef MP-WEIXIN || H5
-  micStatusText.value = '请在真机上测试'
-  uni.showToast({ title: '请在真机上测试', icon: 'none' })
+  micStatusText.value = "请在真机上测试";
+  uni.showToast({ title: "请在真机上测试", icon: "none" });
   // #endif
 }
 
 function clearCache() {
   uni.showModal({
-    title: '清除缓存',
-    content: '确定要清除本地缓存吗？',
+    title: "清除缓存",
+    content: "确定要清除本地缓存吗？",
     success: (res) => {
       if (res.confirm) {
-        uni.clearStorageSync()
-        uni.showToast({ title: '缓存已清除', icon: 'success' })
+        uni.clearStorageSync();
+        uni.showToast({ title: "缓存已清除", icon: "success" });
       }
-    }
-  })
+    },
+  });
 }
 
 function saveWsUrl() {
-  wsStore.setServerUrl(wsUrl.value)
-  uni.showToast({ title: '地址已保存', icon: 'success' })
+  wsStore.setServerUrl(wsUrl.value);
+  uni.showToast({ title: "地址已保存", icon: "success" });
 }
 
 function showGuide() {
   uni.showModal({
-    title: '语音指令示例',
-    content: guideItems.join('\n'),
-    showCancel: false
-  })
+    title: "语音指令示例",
+    content: guideItems.join("\n"),
+    showCancel: false,
+  });
 }
 </script>
 

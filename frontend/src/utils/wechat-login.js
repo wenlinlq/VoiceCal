@@ -1,4 +1,9 @@
+import { API_BASE_URL } from "@/config/api.js";
+import { devLogin, wechatLogin } from "@/api/auth.js";
+
 const STORAGE_KEY = "wechat_login_info";
+
+const DEV_OPENID = import.meta.env.VITE_DEV_OPENID || "";
 
 /**
  * 是否微信小程序环境
@@ -68,89 +73,76 @@ export function checkWechatSession() {
 }
 
 /**
- * 将 code 交给后端换取 openid / token
- * @param {string} code
+ * 将后端登录结果写入统一结构
+ * @param {{ token: string, user: { openid: string, unionid?: string } }} authData
+ * @param {object} [extra]
  */
-export function exchangeCodeWithBackend(code) {
-  const apiBase = import.meta.env.VITE_API_URL || "";
-  if (!apiBase) {
-    return Promise.resolve(null);
-  }
-
-  const url = `${apiBase.replace(/\/$/, "")}/auth/weixin/silent-login`;
-
-  return new Promise((resolve, reject) => {
-    uni.request({
-      url,
-      method: "POST",
-      data: { code },
-      success: (res) => {
-        if (res.statusCode >= 200 && res.statusCode < 300 && res.data) {
-          resolve(res.data);
-          return;
-        }
-        reject(
-          new Error(
-            res.data?.message ||
-              `后端登录失败（${res.statusCode || "unknown"}）`,
-          ),
-        );
-      },
-      fail: (err) => {
-        reject(new Error(err.errMsg || "请求后端登录接口失败"));
-      },
-    });
-  });
+function buildLoginInfo(authData, extra = {}) {
+  const user = authData?.user || {};
+  return {
+    openid: user.openid || "",
+    unionid: user.unionid || "",
+    token: authData?.token || "",
+    loginTime: new Date().toISOString(),
+    sessionValid: true,
+    fromCache: false,
+    backendReady: true,
+    platform: extra.platform || "",
+    silent: extra.silent !== false,
+    code: extra.code || "",
+  };
 }
 
 /**
- * 微信静默登录：优先复用有效 session，否则重新 login 获取 code
+ * 开发环境登录（H5 / 非微信端）
+ */
+export async function devSilentLogin(openid = DEV_OPENID) {
+  if (!openid) {
+    throw new Error(
+      "非微信环境请配置 VITE_DEV_OPENID 以使用 dev-login，或在微信小程序中运行",
+    );
+  }
+  const authData = await devLogin(openid);
+  const info = buildLoginInfo(authData, {
+    platform: "dev",
+    silent: true,
+  });
+  setCachedLoginInfo(info);
+  return info;
+}
+
+/**
+ * 微信静默登录：优先复用有效 session + JWT，否则重新 login 换取 token
  * @returns {Promise<object>}
  */
 export async function wechatSilentLogin() {
   if (!isMpWeixin()) {
-    throw new Error("当前非微信小程序环境，无法执行微信静默登录");
+    return devSilentLogin();
   }
 
   const sessionValid = await checkWechatSession();
   const cached = getCachedLoginInfo();
 
-  if (sessionValid && cached?.openid) {
+  if (sessionValid && cached?.token && cached?.openid) {
     const info = {
       ...cached,
       fromCache: true,
       sessionValid: true,
       loginTime: cached.loginTime || new Date().toISOString(),
+      backendReady: true,
+      platform: "mp-weixin",
     };
     setCachedLoginInfo(info);
     return info;
   }
 
   const { code } = await getWechatLoginCode();
-  const loginTime = new Date().toISOString();
-
-  let backendData = null;
-  try {
-    backendData = await exchangeCodeWithBackend(code);
-  } catch (error) {
-    console.warn("[微信静默登录] 后端换取用户信息失败，仅保留 code", error);
-  }
-
-  const loginInfo = {
-    code,
-    openid: backendData?.openid || cached?.openid || "",
-    unionid: backendData?.unionid || cached?.unionid || "",
-    token: backendData?.token || cached?.token || "",
-    sessionKey: backendData?.session_key || backendData?.sessionKey || "",
-    nickName: backendData?.nickName || cached?.nickName || "",
-    avatarUrl: backendData?.avatarUrl || cached?.avatarUrl || "",
-    loginTime,
-    sessionValid: true,
-    fromCache: false,
+  const authData = await wechatLogin(code);
+  const loginInfo = buildLoginInfo(authData, {
     platform: "mp-weixin",
     silent: true,
-    backendReady: Boolean(backendData),
-  };
+    code,
+  });
 
   setCachedLoginInfo(loginInfo);
   return loginInfo;
