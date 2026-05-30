@@ -3,7 +3,7 @@ import { onLaunch, onShow, onHide } from "@dcloudio/uni-app";
 import { useUserStore } from "@/store/modules/user.js";
 import { useCalendarStore } from "@/store/modules/calendar.js";
 import { checkHealth } from "@/api/health.js";
-import { isMpWeixin } from "@/utils/wechat-login.js";
+import { isMpWeixin, isH5 } from "@/utils/wechat-login.js";
 
 onLaunch(async () => {
   console.log("语音日历 App Launch");
@@ -28,7 +28,10 @@ onLaunch(async () => {
   } catch (error) {
     userStore.setLoginError(error?.message || String(error));
     console.error("[登录] 失败：", error);
-    uni.showToast({ title: "登录失败", icon: "none" });
+    const hint = isH5()
+      ? "H5 登录失败，请在设置页 dev-login 或配置 VITE_DEV_OPENID"
+      : "登录失败";
+    uni.showToast({ title: hint, icon: "none", duration: 3000 });
   }
 
   if (!userStore.token) {

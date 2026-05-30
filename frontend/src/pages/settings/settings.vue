@@ -23,6 +23,25 @@
       </view>
       <!-- #endif -->
 
+      <!-- #ifndef MP-WEIXIN -->
+      <view class="settings-item column">
+        <view class="item-left">
+          <view class="item-info">
+            <text class="item-title">H5 开发登录</text>
+            <text class="item-desc">{{ h5AuthDesc }}</text>
+          </view>
+        </view>
+        <input
+          class="ws-input"
+          v-model="devOpenid"
+          placeholder="测试 openid，如 oTestUser001"
+        />
+        <view class="dev-login-btn" @tap="onH5DevLogin">
+          <text>获取 Token（dev-login）</text>
+        </view>
+      </view>
+      <!-- #endif -->
+
       <view class="settings-item" @tap="clearCache">
         <view class="item-left">
           <view class="item-info">
@@ -94,18 +113,31 @@
 </template>
 
 <script setup>
-import { ref } from "vue";
+import { ref, computed } from "vue";
 import { useWebSocketStore } from "@/store/modules/websocket.js";
+import { useUserStore } from "@/store/modules/user.js";
+import { useCalendarStore } from "@/store/modules/calendar.js";
 import { useMpSafeArea } from "@/composables/useMpSafeArea.js";
 import { API_BASE_URL, SUBSCRIBE_TEMPLATE_ID } from "@/config/api.js";
+import { DEV_OPENID } from "@/utils/wechat-login.js";
 import { promptSubscribeMessage } from "@/utils/mp-subscribe-message.js";
 import GlobalVoice from "@/components/GlobalVoice/GlobalVoice.vue";
 
 const wsStore = useWebSocketStore();
+const userStore = useUserStore();
+const calendarStore = useCalendarStore();
 const { pageBottomStyle } = useMpSafeArea();
 const wsUrl = ref(wsStore.serverUrl);
 const apiUrl = API_BASE_URL;
+const devOpenid = ref(DEV_OPENID || userStore.openid || "");
 const micStatusText = ref("点击检查权限");
+
+const h5AuthDesc = computed(() => {
+  if (userStore.token) {
+    return `已登录 ${userStore.openid}，Token 已缓存`;
+  }
+  return "调用 POST /api/auth/dev-login 获取 JWT";
+});
 const subscribeDesc = SUBSCRIBE_TEMPLATE_ID
   ? "授权后可接收日程开始前的微信提醒"
   : "未配置模板 ID（见 .env.local）";
@@ -119,6 +151,25 @@ const guideItems = [
 
 function onSubscribeMessage() {
   promptSubscribeMessage();
+}
+
+async function onH5DevLogin() {
+  const openid = devOpenid.value.trim();
+  if (!openid) {
+    uni.showToast({ title: "请填写 openid", icon: "none" });
+    return;
+  }
+  try {
+    await userStore.loginWithDevOpenid(openid);
+    await calendarStore.fetchEvents();
+    uni.showToast({ title: "登录成功，Token 已保存", icon: "success" });
+  } catch (error) {
+    uni.showToast({
+      title: error.message || "dev-login 失败",
+      icon: "none",
+      duration: 3000,
+    });
+  }
 }
 
 function checkMicPermission() {
@@ -257,6 +308,26 @@ function showGuide() {
   padding: 0 20rpx;
   font-size: 26rpx;
   color: #333;
+}
+
+.dev-login-btn {
+  margin-top: 16rpx;
+  height: 72rpx;
+  background: #1a73e8;
+  border-radius: 12rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  text {
+    color: #fff;
+    font-size: 28rpx;
+    font-weight: 500;
+  }
+
+  &:active {
+    opacity: 0.85;
+  }
 }
 
 .guide-card {
