@@ -25,7 +25,7 @@ async def test_service_fallback_requires_confirm_on_create(db_session):
         mock_agent = AsyncMock(return_value=_make_mock_result("好的，已为你添加日程。"))
         mock_agent_cls.return_value = mock_agent
 
-        result = await svc.handle_text(db_session, "demo_user", "明天下午三点提醒我开组会")
+        result = await svc.handle_text(db_session, "test_openid_agent", "明天下午三点提醒我开组会")
 
     # 安全网纠正了 agent 的完成语 → 确认提问
     assert "确认" in result["reply_text"]
@@ -34,7 +34,7 @@ async def test_service_fallback_requires_confirm_on_create(db_session):
     assert result["speech"] is None
 
     # 还没落库
-    events = await CalendarService(db_session, "demo_user").query_events()
+    events = await CalendarService(db_session, "test_openid_agent").query_events()
     assert len(events) == 0
 
 
@@ -47,7 +47,7 @@ async def test_service_fallback_with_confirm_creates_event(db_session):
         mock_agent = AsyncMock(return_value=_make_mock_result("好的。"))
         mock_agent_cls.return_value = mock_agent
 
-        result = await svc.handle_text(db_session, "demo_user", "确认")
+        result = await svc.handle_text(db_session, "test_openid_agent", "确认")
 
     # "确认" 不包含时间和创建关键词，兜底不执行，直接透传 agent 回复
     assert result["need_confirm"] is False
@@ -62,7 +62,7 @@ async def test_service_speech_fallback(db_session):
         mock_agent = AsyncMock(return_value=_make_mock_result("查询结果：没有日程。"))
         mock_agent_cls.return_value = mock_agent
 
-        result = await svc.handle_text(db_session, "demo_user", "今天有什么安排")
+        result = await svc.handle_text(db_session, "test_openid_agent", "今天有什么安排")
         assert result["reply_text"] == "查询结果：没有日程。"
 
 
@@ -82,7 +82,7 @@ async def test_need_confirm_true_on_time_conflict(db_session):
         start_time = datetime.now(timezone.utc) + timedelta(days=1, hours=1)
         end_time = start_time + timedelta(hours=1)
         await TOOL_REGISTRY["add_calendar_event"](
-            db_session, "demo_user",
+            db_session, "test_openid_agent",
             {
                 "title": "项目会议",
                 "start_time": start_time.isoformat(),
@@ -93,7 +93,7 @@ async def test_need_confirm_true_on_time_conflict(db_session):
 
         # 再用相同时间创建 → 兜底触发 TIME_CONFLICT → need_confirm=True
         second = await svc.handle_text(
-            db_session, "demo_user",
+            db_session, "test_openid_agent",
             f"明天下午三点安排项目会议",
         )
         assert second["need_confirm"] is True
@@ -121,7 +121,7 @@ async def test_progress_reply_replaced_by_tool_confirmation(db_session):
         mock_agent = AsyncMock(return_value=_make_mock_result("正在查询你近期的日程安排……"))
         mock_agent_cls.return_value = mock_agent
 
-        result = await svc.handle_text(db_session, "demo_user", "明天下午三点提醒我开组会。")
+        result = await svc.handle_text(db_session, "test_openid_agent", "明天下午三点提醒我开组会。")
         assert "还要继续添加吗" in result["reply_text"]
         assert result["need_confirm"] is True
 
@@ -168,7 +168,7 @@ async def test_streaming_speech_only_forwards_incremental_audio(db_session):
     with patch("app.services.agent_service.ReActAgent", return_value=FakeSpeechAgent()):
         result = await svc.handle_text(
             db_session,
-            "demo_user",
+            "test_openid_agent",
             "你好",
             on_speech_chunk=on_speech_chunk,
         )
@@ -221,7 +221,7 @@ async def test_streaming_speech_emits_empty_last_marker_when_final_print_has_no_
     with patch("app.services.agent_service.ReActAgent", return_value=FakeSpeechAgent()):
         result = await svc.handle_text(
             db_session,
-            "demo_user",
+            "test_openid_agent",
             "你好",
             on_speech_chunk=on_speech_chunk,
         )

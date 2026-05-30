@@ -2,7 +2,7 @@
 日历服务 — 日程 CRUD 操作。
 
 封装对 events 表的所有数据库操作，提供创建、查询、更新、删除功能。
-所有操作按 user_id 隔离，初期默认用户为 demo_user。
+所有操作按 user_id 隔离。
 """
 
 import logging
@@ -31,14 +31,15 @@ def _to_local_naive(value: Optional[datetime]) -> Optional[datetime]:
 class CalendarService:
     """日历 CRUD 服务，封装对 events 表的数据库操作。"""
 
-    def __init__(self, db: AsyncSession, user_id: str = "demo_user"):
+    def __init__(self, db: AsyncSession, user_id: str):
         """
         Args:
             db: SQLAlchemy 异步数据库会话。
-            user_id: 用户标识，默认为 demo_user。
+            user_id: 用户标识（openid）。
         """
         self.db = db
         self.user_id = user_id
+        logger.info("[日历服务] 初始化 user_id=%s", user_id)
 
     async def create_event(self, data: EventCreate) -> Event:
         """

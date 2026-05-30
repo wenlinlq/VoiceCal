@@ -2,7 +2,10 @@ import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.db.database import Base
+# 确保所有 model 被 Base 感知
 from app.models.event import Event  # noqa: F401
+from app.models.user import User  # noqa: F401
+from app.models.subscription import UserSubscription  # noqa: F401
 
 
 @pytest_asyncio.fixture

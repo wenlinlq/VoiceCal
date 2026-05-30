@@ -8,6 +8,9 @@
 4. Agent 处理完成后，推送 agent.reply、tts.chunk、turn.done 给前端。
 5. 连接断开或异常时清理会话资源。
 
+鉴权：
+    前端通过 query param 传入 ?token=JWT_TOKEN，后端握手时解析 openid。
+
 协议说明（当前后端实际协议，纯 JSON，无二进制 header）：
     客户端 → 服务端: text.message / audio.chunk / audio.end
     服务端 → 客户端: transcription / agent.reply / tts.chunk / turn.done / error
@@ -21,6 +24,7 @@ import traceback
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
+from app.core.auth import decode_token
 from app.db.database import get_session_factory
 from app.schemas.ws_schema import AgentReply, ErrorMessage, TTSChunkMessage, TranscriptionResult, TurnDone
 from app.services.agent_service import CalendarAgentService
@@ -41,10 +45,41 @@ def _safe_text(text: str, max_len: int = 200) -> str:
     return text if len(text) <= max_len else text[:max_len] + "...[已截断]"
 
 
+def _resolve_user_id_from_ws(ws: WebSocket) -> str:
+    """从 WebSocket query param 解析用户身份。
+
+    优先解析 ?token=JWT，兼容旧版 ?user_id=xxx。
+    """
+    token = ws.query_params.get("token")
+    if token:
+        try:
+            payload = decode_token(token)
+            openid = payload.get("openid", "")
+            if openid:
+                logger.info("[WebSocket] token鉴权成功 openid=%s", openid)
+                return openid
+        except Exception as e:
+            logger.warning("[WebSocket] token校验失败: %s，尝试兼容模式", e)
+
+    # 兼容旧版 user_id
+    fallback = ws.query_params.get("user_id", "")
+    if fallback and fallback != "demo_user":
+        logger.info("[WebSocket] 使用兼容模式 user_id=%s", fallback)
+        return fallback
+
+    logger.warning("[WebSocket] 无法解析用户身份，拒绝连接")
+    raise RuntimeError("鉴权失败：缺少有效的 token 或 user_id")
+
+
 @router.websocket("/ws/voice")
 async def ws_voice(ws: WebSocket):
     """
     语音 WebSocket 主入口。
+
+    鉴权流程：
+        1. 握手前从 ?token= 解析 JWT → openid
+        2. 兼容旧版 ?user_id= （非 demo_user 可用）
+        3. 拒绝无效身份
 
     完整处理链路：
         text.message / audio.chunk → ASR转录 → Agent处理 →
@@ -53,9 +88,15 @@ async def ws_voice(ws: WebSocket):
     Args:
         ws: FastAPI WebSocket 连接对象。
     """
+    # 握手前先解析身份
+    try:
+        user_id = _resolve_user_id_from_ws(ws)
+    except Exception:
+        await ws.close(code=4001, reason="鉴权失败")
+        return
+
     await ws.accept()
     session_id = None
-    user_id = ws.query_params.get("user_id", "demo_user")
     agent_service = CalendarAgentService()
     asr = get_asr_service()
     tts = get_tts_service()
@@ -63,7 +104,7 @@ async def ws_voice(ws: WebSocket):
     recording_meta: dict[str, object] = {}
 
     client_info = f"{ws.client.host}:{ws.client.port}" if ws.client else "unknown"
-    logger.info("[WebSocket] 连接已建立 client=%s", client_info)
+    logger.info("[WebSocket] 连接已建立 client=%s user_id=%s", client_info, user_id)
 
     try:
         while True:
@@ -79,7 +120,6 @@ async def ws_voice(ws: WebSocket):
 
             if msg_type == "text.message":
                 session_id = msg.get("session_id", "unknown")
-                user_id = msg.get("user_id", user_id) or "demo_user"
                 text = msg.get("text", "")
                 if not text:
                     logger.warning("[WebSocket] 收到空文本消息 session_id=%s", session_id)
@@ -87,8 +127,9 @@ async def ws_voice(ws: WebSocket):
                     continue
 
                 logger.info(
-                    "[WebSocket] 收到文本消息 session_id=%s 文本=%s",
+                    "[WebSocket] 收到文本消息 session_id=%s user_id=%s 文本=%s",
                     session_id,
+                    user_id,
                     _safe_text(text),
                 )
                 await session_service.register(session_id, user_id=user_id)
@@ -96,7 +137,6 @@ async def ws_voice(ws: WebSocket):
 
             elif msg_type == "audio_start":
                 session_id = msg.get("session_id", "unknown")
-                user_id = msg.get("user_id", user_id) or "demo_user"
                 await session_service.register(session_id, user_id=user_id)
                 audio_buffer.clear()
                 recording_meta = {
@@ -104,15 +144,15 @@ async def ws_voice(ws: WebSocket):
                     "sample_rate": msg.get("sampleRate", msg.get("sample_rate", "")),
                 }
                 logger.info(
-                    "[WebSocket] 音频开始 session_id=%s format=%s sample_rate=%s",
+                    "[WebSocket] 音频开始 session_id=%s user_id=%s format=%s sample_rate=%s",
                     session_id,
+                    user_id,
                     recording_meta["format"],
                     recording_meta["sample_rate"],
                 )
 
             elif msg_type == "audio.chunk":
                 session_id = msg.get("session_id", "unknown")
-                user_id = msg.get("user_id", user_id) or "demo_user"
                 await session_service.register(session_id, user_id=user_id)
                 try:
                     chunk = base64.b64decode(msg.get("data", ""))
@@ -146,13 +186,13 @@ async def ws_voice(ws: WebSocket):
 
             elif msg_type in ("audio.end", "audio_end"):
                 session_id = msg.get("session_id", "unknown")
-                user_id = msg.get("user_id", user_id) or "demo_user"
                 await session_service.register(session_id, user_id=user_id)
                 sample_rate = msg.get("sample_rate", 16000)
                 total_bytes = sum(len(c) for c in audio_buffer)
                 logger.info(
-                    "[WebSocket] 音频录制结束 session_id=%s 分片数=%s 总字节=%s 采样率=%s",
+                    "[WebSocket] 音频录制结束 session_id=%s user_id=%s 分片数=%s 总字节=%s 采样率=%s",
                     session_id,
+                    user_id,
                     len(audio_buffer),
                     total_bytes,
                     sample_rate,
@@ -197,9 +237,9 @@ async def ws_voice(ws: WebSocket):
                 )
 
     except WebSocketDisconnect:
-        logger.info("[WebSocket] 连接正常关闭 session_id=%s", session_id)
+        logger.info("[WebSocket] 连接正常关闭 session_id=%s user_id=%s", session_id, user_id)
     except Exception:
-        logger.exception("[WebSocket] 处理过程中发生异常 session_id=%s", session_id)
+        logger.exception("[WebSocket] 处理过程中发生异常 session_id=%s user_id=%s", session_id, user_id)
     finally:
         if session_id:
             await session_service.set_state(session_id, connected=False)

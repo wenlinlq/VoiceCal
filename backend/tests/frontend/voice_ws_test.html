@@ -489,7 +489,7 @@ async function startRecording() {
   try {
     mediaStream = await navigator.mediaDevices.getUserMedia({
       audio: {
-        sampleRate: 16000,
+        sampleRate: { ideal: 16000 },
         channelCount: 1,
         echoCancellation: true,
         noiseSuppression: true,
@@ -526,7 +526,8 @@ async function startRecording() {
   };
 
   source.connect(scriptProcessor);
-  scriptProcessor.connect(audioCtx.destination);
+  // NOTE: 不连接到 destination，避免 Windows 上音频图冲突导致 inputBuffer 全零
+  // 仅靠 source.connect(scriptProcessor) 维持图活跃，回调中只读 inputBuffer 不管 output
 
   recording = true;
   btnRecord.disabled = true;
