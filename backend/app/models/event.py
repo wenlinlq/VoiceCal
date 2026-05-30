@@ -21,6 +21,7 @@ class Event(Base):
     start_time: Mapped[datetime] = mapped_column(DateTime(timezone=False))
     end_time: Mapped[datetime] = mapped_column(DateTime(timezone=False))
     is_all_day: Mapped[bool] = mapped_column(Boolean, default=False)
+    completed: Mapped[bool] = mapped_column(Boolean, default=False)
     # 提醒与推送
     remind_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=False), nullable=True)
     remind_enabled: Mapped[bool] = mapped_column(Boolean, default=False)

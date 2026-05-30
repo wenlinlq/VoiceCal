@@ -82,7 +82,7 @@ class CalendarService:
             keyword: 关键词，模糊匹配标题和描述。
 
         Returns:
-            list[Event]: 符合条件的日程列表，按开始时间排序。
+            list[Event]: 符合条件的日程列表，未完成优先，再按开始时间排序。
         """
         logger.info(
             "[日历服务] 查询日程 开始=%s 结束=%s 关键词=%s",
@@ -101,7 +101,7 @@ class CalendarService:
             pattern = f"%{keyword}%"
             from sqlalchemy import or_
             stmt = stmt.where(or_(Event.title.ilike(pattern), Event.description.ilike(pattern)))
-        stmt = stmt.order_by(Event.start_time)
+        stmt = stmt.order_by(Event.completed.asc(), Event.start_time.asc(), Event.created_at.asc())
         result = await self.db.execute(stmt)
         events = list(result.scalars().all())
         logger.info("[日历服务] 查询完成 数量=%s", len(events))

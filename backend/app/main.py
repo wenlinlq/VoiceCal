@@ -23,7 +23,7 @@ from app.api.websocket import router as ws_router
 from app.api.events import router as events_router
 from app.api.auth import router as auth_router
 from app.api.subscribe import router as subscribe_router
-from app.db.database import Base, get_engine
+from app.db.database import Base, get_engine, sync_schema
 from app.services.push_scheduler import start_push_scheduler, stop_push_scheduler
 
 # 配置全局日志格式
@@ -41,6 +41,7 @@ async def lifespan(app: FastAPI):
     logger.info("[系统] 应用启动，正在初始化数据库表...")
     async with get_engine().begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        await conn.run_sync(sync_schema)
     logger.info("[系统] 数据库表初始化完成")
     try:
         start_push_scheduler()

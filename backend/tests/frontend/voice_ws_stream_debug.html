@@ -57,21 +57,41 @@ button:disabled { background: #334155; color: #94a3b8; cursor: not-allowed; }
 
   <div class="grid">
     <div>
+      <div class="card" style="border-color:#e94560;">
+        <h2>鉴权 Token（必填）</h2>
+        <div class="stack">
+          <div class="row">
+            <div>
+              <label for="apiBase">API 地址</label>
+              <input id="apiBase" value="http://localhost:8000">
+            </div>
+            <div>
+              <label for="devOpenid">测试 openid</label>
+              <input id="devOpenid" value="test_user_001">
+            </div>
+          </div>
+          <div class="row">
+            <button id="btnDevLogin" class="green">获取测试 Token</button>
+            <span id="tokenBadge" class="badge bad">未设置</span>
+          </div>
+          <div>
+            <label for="tokenInput">JWT Token</label>
+            <input id="tokenInput" placeholder="粘贴 Token，或点上面按钮自动获取">
+          </div>
+        </div>
+      </div>
+
       <div class="card">
         <h2>连接</h2>
         <div class="stack">
           <div>
-            <label for="wsUrl">WebSocket 地址</label>
+            <label for="wsUrl">WebSocket 地址（token 自动拼接）</label>
             <input id="wsUrl" value="ws://localhost:8000/ws/voice">
           </div>
           <div class="row">
             <div>
               <label for="sessionId">session_id</label>
               <input id="sessionId">
-            </div>
-            <div>
-              <label for="userId">user_id</label>
-              <input id="userId" value="demo_user">
             </div>
           </div>
           <div class="row">
@@ -118,6 +138,9 @@ button:disabled { background: #334155; color: #94a3b8; cursor: not-allowed; }
 }</textarea>
           </div>
           <button id="btnSendRaw" class="slate">发送原始 JSON</button>
+          <div style="font-size:11px;color:#888;margin-top:4px">
+            注：type=text.message 时 user_id 字段会被自动忽略，身份由 token 决定
+          </div>
         </div>
       </div>
 
@@ -342,19 +365,52 @@ function buildTextMessage(text) {
   return {
     type: 'text.message',
     session_id: el('sessionId').value.trim() || sessionId,
-    user_id: el('userId').value.trim() || 'demo_user',
     text,
   };
+}
+
+function getToken() {
+  return el('tokenInput').value.trim();
+}
+
+async function devLogin() {
+  const openid = el('devOpenid').value.trim();
+  const base = el('apiBase').value.trim();
+  if (!openid) { log('请输入 openid', 'error'); return; }
+  log('POST ' + base + '/api/auth/dev-login', 'out');
+  try {
+    const r = await fetch(base + '/api/auth/dev-login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ openid: openid }),
+    });
+    const d = await r.json();
+    if (d.token) {
+      el('tokenInput').value = d.token;
+      el('tokenBadge').textContent = '已设置';
+      el('tokenBadge').className = 'badge ok';
+      log('Token 获取成功 openid=' + d.user.openid, 'in');
+    } else {
+      log('Token 获取失败: ' + JSON.stringify(d), 'error');
+    }
+  } catch (e) {
+    log('登录请求失败: ' + e.message, 'error');
+  }
 }
 
 async function connectWs() {
   if (ws && ws.readyState === WebSocket.OPEN) return;
   if (ws && ws.readyState === WebSocket.CONNECTING && connectPromise) return connectPromise;
 
-  const url = el('wsUrl').value.trim();
+  let url = el('wsUrl').value.trim();
   if (!url) throw new Error('请先填写 WebSocket 地址');
 
-  log('开始连接: ' + url, 'out');
+  const token = getToken();
+  if (token) {
+    url += (url.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(token);
+  }
+
+  log('开始连接: ' + url.replace(token || '', '***'), 'out');
   ws = new WebSocket(url);
 
   ws.onopen = () => {
@@ -430,7 +486,6 @@ async function sendRawJson() {
   }
   const parsed = JSON.parse(raw);
   if (!parsed.session_id) parsed.session_id = el('sessionId').value.trim() || sessionId;
-  if (!parsed.user_id) parsed.user_id = el('userId').value.trim() || 'demo_user';
   if (parsed.type === 'text.message') {
     resetTurnState();
     turnStartedAt = performance.now();
@@ -529,6 +584,7 @@ document.addEventListener('DOMContentLoaded', () => {
   updateAudioUI();
   updateStats();
 
+  el('btnDevLogin').addEventListener('click', () => devLogin().catch((error) => log(error.message, 'error')));
   el('btnConnect').addEventListener('click', () => connectWs().catch((error) => log(error.message, 'error')));
   el('btnDisconnect').addEventListener('click', disconnectWs);
   el('btnUnlock').addEventListener('click', unlockAudio);

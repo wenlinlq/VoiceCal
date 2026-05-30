@@ -1,30 +1,85 @@
-# VoiceCal（声历 Agent）接口文档（以当前代码实现为准）
+# VoiceCal（声历 Agent）API 文档
 
-更新时间：2026-05-29  
-后端：FastAPI（`backend/app`）  
+更新时间：2026-05-30  
+后端实现位置：`backend/app`
 
-> 说明：仓库里已有的设计/规划文档 `backend/语音日历工具-后端开发与接口文档 .md` 包含“二进制 header 帧 / control action / partial ASR”等设想；而**当前后端实现**的 WebSocket 协议是“纯 JSON 消息 + 音频分片 base64”，并且 **ASR 只在 `audio.end` 后一次性返回转写结果**。本文档描述的是“跑起来即可联调”的实现版接口。
+> 本文档以当前代码实现为准，覆盖 `backend/app/main.py` 已注册的全部 HTTP / WebSocket 接口。
 
----
+## 1. 基本信息
 
-## 0. 基本信息
-
-- 默认服务端口：`8000`（见 `backend/app/main.py`、`backend/docker-compose.yml`）
-- OpenAPI（FastAPI 默认）：
+- 默认服务地址：`http://localhost:8000`
+- OpenAPI：
   - Swagger UI：`GET /docs`
   - OpenAPI JSON：`GET /openapi.json`
   - ReDoc：`GET /redoc`
-- 鉴权：当前无（MVP 默认用户多为 `demo_user`）
-- 内容类型：HTTP 为 `application/json`；WebSocket 为 `text frame(JSON)`（不发送二进制帧）
-- 时间格式：
-  - REST 接口入参 `start_time/end_time`：ISO 8601 字符串（FastAPI 解析为 `datetime`）
-  - 服务端存储：若传入带时区 `datetime`，会转为 `Asia/Shanghai`（UTC+8）再去掉 tzinfo（naive）后落库（见 `backend/app/services/calendar_service.py`）
+- 内容类型：
+  - HTTP：`application/json`
+  - WebSocket：JSON 文本帧
 
----
+当前已注册接口：
 
-## 1. 通用返回结构（HTTP）
+- `GET /api/health`
+- `POST /api/auth/wechat-login`
+- `POST /api/auth/dev-login`
+- `POST /api/agent/text`
+- `GET /api/events`
+- `POST /api/events`
+- `GET /api/events/{event_id}`
+- `PUT /api/events/{event_id}`
+- `DELETE /api/events/{event_id}`
+- `POST /api/wechat/subscribe-result`
+- `GET /ws/voice`（WebSocket）
 
-除 `/api/agent/text` 外，其它 REST 接口统一返回：
+## 2. 鉴权规则
+
+### 2.1 HTTP 鉴权
+
+以下接口需要请求头：
+
+```http
+Authorization: Bearer <jwt_token>
+```
+
+需要鉴权的接口：
+
+- `/api/agent/text`
+- `/api/events*`
+- `/api/wechat/subscribe-result`
+
+无需鉴权的接口：
+
+- `/api/health`
+- `/api/auth/wechat-login`
+- `/api/auth/dev-login`
+
+说明：
+
+- JWT 载荷里实际使用的是 `openid`
+- 即使某些请求体里带了 `user_id` 字段，服务端最终仍以 JWT 中的身份为准
+
+### 2.2 WebSocket 鉴权
+
+连接地址：
+
+```text
+ws://localhost:8000/ws/voice?token=<jwt_token>
+```
+
+兼容模式：
+
+```text
+ws://localhost:8000/ws/voice?user_id=<openid>
+```
+
+注意：
+
+- 优先使用 `token`
+- `user_id` 只是兼容旧调用方式
+- 缺少有效身份时，连接会在握手阶段被拒绝，关闭码为 `4001`
+
+## 3. HTTP 通用返回
+
+除 `/api/auth/*` 和 `/api/agent/text` 外，其它 HTTP 接口统一返回：
 
 ```json
 {
@@ -34,104 +89,240 @@
 }
 ```
 
-- `code=0` 表示成功
-- 非 0 表示业务错误（例如查不到事件时返回 `code=404`）
-- 注意：当前实现里 **即便 `code=404`，HTTP 状态码通常仍为 200**（因为未抛 `HTTPException`，而是返回了 `APIResponse.error(...)`）
+规则：
 
----
+- `code = 0`：成功
+- `code != 0`：业务错误
+- 某些业务错误会体现在响应体里，而不是 HTTP 状态码里
 
-## 2. 健康检查
+例如日程不存在时：
 
-### 2.1 `GET /api/health`
+```json
+{
+  "code": 404,
+  "message": "日程不存在",
+  "data": null
+}
+```
 
-响应（示例）：
+但 HTTP 状态码仍通常是 `200`。
+
+## 4. 健康检查
+
+### `GET /api/health`
+
+是否鉴权：否
+
+响应示例：
 
 ```json
 {
   "code": 0,
   "message": "ok",
-  "data": { "status": "running" }
+  "data": {
+    "status": "running"
+  }
 }
 ```
 
----
+## 5. 登录鉴权
 
-## 3. Agent 文本调试接口
+### `POST /api/auth/wechat-login`
 
-### 3.1 `POST /api/agent/text`
+是否鉴权：否
 
-用途：跳过语音链路，直接用文本驱动 Agent（便于调试）。
+请求体：
+
+```json
+{
+  "code": "wx_login_code"
+}
+```
+
+响应体：
+
+```json
+{
+  "token": "<jwt_token>",
+  "user": {
+    "openid": "oMockWechatUser001",
+    "unionid": "unionid-001"
+  }
+}
+```
+
+说明：
+
+- 服务端会调用微信 `jscode2session`
+- 若微信返回失败，接口会返回 HTTP `401`
+
+### `POST /api/auth/dev-login`
+
+是否鉴权：否
+
+请求体：
+
+```json
+{
+  "openid": "oTestUser001"
+}
+```
+
+响应体：
+
+```json
+{
+  "token": "<jwt_token>",
+  "user": {
+    "openid": "oTestUser001"
+  }
+}
+```
+
+说明：
+
+- 仅非生产环境可用
+- 生产环境会返回 HTTP `403`
+
+## 6. Agent 文本调试
+
+### `POST /api/agent/text`
+
+是否鉴权：是
+
+请求头：
+
+```http
+Authorization: Bearer <jwt_token>
+```
 
 请求体：
 
 ```json
 {
   "session_id": "s_001",
-  "user_id": "demo_user",
+  "user_id": "ignored_by_server",
   "text": "帮我明天下午三点加个会议"
 }
 ```
 
-响应体（示例）：
+说明：
+
+- `user_id` 字段当前仅为兼容字段
+- 服务端实际使用 JWT 中的 `openid`
+
+响应体：
 
 ```json
 {
   "session_id": "s_001",
-  "intent": "agent_scope",
+  "intent": "",
   "slots": {},
   "tool_calls": [],
-  "reply_text": "好的，已为你设置下午三点的会议。"
+  "reply_text": "这个时间你已经有安排了，还要继续添加吗？"
 }
 ```
 
 字段说明：
 
-- `session_id`：会话 ID（由客户端生成）
-- `user_id`：用户 ID（默认 `demo_user`）
-- `reply_text`：Agent 给用户的最终回复文案
-- 备注：当前适配层固定 `intent="agent_scope"`，`slots/tool_calls` 为空（见 `backend/app/agents/calendar_agent.py`）
+- `session_id`：会话 ID
+- `intent`：当前实现可能为空字符串
+- `slots`：结构化槽位
+- `tool_calls`：工具调用结果列表
+- `reply_text`：给用户的最终回复文本
 
-错误：
+错误行为：
 
-- 可能返回 FastAPI 默认 `500` 错误结构（未做统一 `APIResponse` 包装）
+- 缺少或错误的 `Authorization`：HTTP `401`
+- 处理链路异常：通常返回 HTTP `500`
 
----
-
-## 4. 日程（Events）CRUD
+## 7. 日程 Events API
 
 前缀：`/api/events`
 
-> 重要：当前 HTTP CRUD 接口未透传 `user_id`，因此所有数据实际都按 `demo_user` 隔离（见 `CalendarService(db, user_id="demo_user")`）。
+是否鉴权：是
 
-### 4.1 `GET /api/events`
+### 7.1 事件对象
 
-查询参数：
-
-- `start`：可选，ISO 8601（查询开始时间）
-- `end`：可选，ISO 8601（查询结束时间）
-
-响应 `data`：`EventResponse[]`
-
-`EventResponse`（示例）：
+响应里的事件对象结构：
 
 ```json
 {
   "id": "9d2a7e2f-5a7b-4f7a-9e1f-2a0b1d9a3c25",
-  "user_id": "demo_user",
+  "user_id": "oTest_user_a_001",
   "title": "项目会议",
-  "description": null,
-  "location": null,
+  "description": "讨论里程碑",
+  "location": "会议室 A",
   "start_time": "2026-05-30T15:00:00",
   "end_time": "2026-05-30T16:00:00",
   "is_all_day": false,
-  "created_at": "2026-05-29T12:00:00",
-  "updated_at": "2026-05-29T12:00:00"
+  "completed": false,
+  "remind_at": null,
+  "remind_enabled": false,
+  "push_status": "pending",
+  "pushed_at": null,
+  "subscribe_template_id": null,
+  "created_at": "2026-05-30T10:00:00",
+  "updated_at": "2026-05-30T10:00:00"
 }
 ```
 
-### 4.2 `POST /api/events`
+时间说明：
 
-请求体：`EventCreate`
+- 请求体中的时间字段使用 ISO 8601
+- 当前服务端会按 `Asia/Shanghai` 语义落库为无时区 `datetime`
+
+### 7.2 `GET /api/events`
+
+查询参数：
+
+- `start`：可选，ISO 8601 开始时间
+- `end`：可选，ISO 8601 结束时间
+
+示例：
+
+```http
+GET /api/events?start=2026-05-30T00:00:00&end=2026-05-30T23:59:59
+Authorization: Bearer <jwt_token>
+```
+
+响应示例：
+
+```json
+{
+  "code": 0,
+  "message": "ok",
+  "data": [
+    {
+      "id": "9d2a7e2f-5a7b-4f7a-9e1f-2a0b1d9a3c25",
+      "user_id": "oTest_user_a_001",
+      "title": "项目会议",
+      "description": null,
+      "location": null,
+      "start_time": "2026-05-30T15:00:00",
+      "end_time": "2026-05-30T16:00:00",
+      "is_all_day": false,
+      "completed": false,
+      "remind_at": null,
+      "remind_enabled": false,
+      "push_status": "pending",
+      "pushed_at": null,
+      "subscribe_template_id": null,
+      "created_at": "2026-05-30T10:00:00",
+      "updated_at": "2026-05-30T10:00:00"
+    }
+  ]
+}
+```
+
+补充：
+
+- 当前实现按用户隔离数据
+- 测试覆盖显示：未完成事件排在前面，已完成事件排在后面
+
+### 7.3 `POST /api/events`
+
+请求体：
 
 ```json
 {
@@ -140,74 +331,232 @@
   "location": "会议室 A",
   "start_time": "2026-05-30T15:00:00+08:00",
   "end_time": "2026-05-30T16:00:00+08:00",
-  "is_all_day": false
+  "is_all_day": false,
+  "completed": false,
+  "remind_at": "2026-05-30T14:30:00+08:00",
+  "remind_enabled": true,
+  "subscribe_template_id": "template_001"
 }
 ```
 
-响应：`APIResponse.data = EventResponse`，并附带 `message="日程已创建"`。
+响应示例：
 
-### 4.3 `GET /api/events/{event_id}`
+```json
+{
+  "code": 0,
+  "message": "日程已创建",
+  "data": {
+    "id": "9d2a7e2f-5a7b-4f7a-9e1f-2a0b1d9a3c25",
+    "user_id": "oTest_user_a_001",
+    "title": "项目会议",
+    "description": "讨论里程碑",
+    "location": "会议室 A",
+    "start_time": "2026-05-30T15:00:00",
+    "end_time": "2026-05-30T16:00:00",
+    "is_all_day": false,
+    "completed": false,
+    "remind_at": "2026-05-30T14:30:00",
+    "remind_enabled": true,
+    "push_status": "pending",
+    "pushed_at": null,
+    "subscribe_template_id": "template_001",
+    "created_at": "2026-05-30T10:00:00",
+    "updated_at": "2026-05-30T10:00:00"
+  }
+}
+```
+
+### 7.4 `GET /api/events/{event_id}`
+
+路径参数：
 
 - `event_id`：UUID
 
-不存在时返回（示例）：
+成功响应：
 
 ```json
-{ "code": 404, "message": "日程不存在", "data": null }
+{
+  "code": 0,
+  "message": "ok",
+  "data": {
+    "id": "9d2a7e2f-5a7b-4f7a-9e1f-2a0b1d9a3c25",
+    "user_id": "oTest_user_a_001",
+    "title": "项目会议",
+    "description": null,
+    "location": null,
+    "start_time": "2026-05-30T15:00:00",
+    "end_time": "2026-05-30T16:00:00",
+    "is_all_day": false,
+    "completed": false,
+    "remind_at": null,
+    "remind_enabled": false,
+    "push_status": "pending",
+    "pushed_at": null,
+    "subscribe_template_id": null,
+    "created_at": "2026-05-30T10:00:00",
+    "updated_at": "2026-05-30T10:00:00"
+  }
+}
 ```
 
-### 4.4 `PUT /api/events/{event_id}`
+不存在时：
 
-请求体：`EventUpdate`（字段均可选，仅更新传入字段）
+```json
+{
+  "code": 404,
+  "message": "日程不存在",
+  "data": null
+}
+```
+
+### 7.5 `PUT /api/events/{event_id}`
+
+请求体字段均可选：
 
 ```json
 {
   "title": "项目会议（更新）",
+  "description": "改到大会议室",
+  "location": "会议室 B",
   "start_time": "2026-05-30T16:00:00+08:00",
-  "end_time": "2026-05-30T17:00:00+08:00"
+  "end_time": "2026-05-30T17:00:00+08:00",
+  "is_all_day": false,
+  "completed": true,
+  "remind_at": "2026-05-30T15:30:00+08:00",
+  "remind_enabled": true,
+  "push_status": "sent",
+  "subscribe_template_id": "template_001"
 }
 ```
 
-成功返回 `message="日程已更新"`；不存在返回 `code=404`。
+成功响应：
 
-### 4.5 `DELETE /api/events/{event_id}`
+```json
+{
+  "code": 0,
+  "message": "日程已更新",
+  "data": {
+    "id": "9d2a7e2f-5a7b-4f7a-9e1f-2a0b1d9a3c25",
+    "user_id": "oTest_user_a_001",
+    "title": "项目会议（更新）",
+    "description": "改到大会议室",
+    "location": "会议室 B",
+    "start_time": "2026-05-30T16:00:00",
+    "end_time": "2026-05-30T17:00:00",
+    "is_all_day": false,
+    "completed": true,
+    "remind_at": "2026-05-30T15:30:00",
+    "remind_enabled": true,
+    "push_status": "sent",
+    "pushed_at": null,
+    "subscribe_template_id": "template_001",
+    "created_at": "2026-05-30T10:00:00",
+    "updated_at": "2026-05-30T10:05:00"
+  }
+}
+```
 
-成功返回 `message="日程已删除"`；不存在返回 `code=404`。
+### 7.6 `DELETE /api/events/{event_id}`
 
----
+成功响应：
 
-## 5. WebSocket：语音主链路
+```json
+{
+  "code": 0,
+  "message": "日程已删除",
+  "data": null
+}
+```
 
-### 5.1 连接
+不存在时：
 
-- URL：`GET /ws/voice`
-- Query：
-  - `user_id`：可选，缺省为 `demo_user`
+```json
+{
+  "code": 404,
+  "message": "日程不存在",
+  "data": null
+}
+```
 
-示例：`ws://localhost:8000/ws/voice?user_id=demo_user`
+## 8. 微信订阅消息授权结果
 
-### 5.2 客户端 → 服务端消息
+### `POST /api/wechat/subscribe-result`
 
-所有消息均为 JSON 文本帧，字段 `type` 决定消息类型。
+是否鉴权：是
 
-#### 5.2.1 文本直通：`text.message`
+请求体：
+
+```json
+{
+  "template_id": "template_001",
+  "status": "accept"
+}
+```
+
+`status` 当前约定值：
+
+- `accept`
+- `reject`
+- `ban`
+
+响应示例：
+
+```json
+{
+  "code": 0,
+  "message": "订阅状态已保存",
+  "data": null
+}
+```
+
+说明：
+
+- 服务端会按 `(user_id, template_id)` 做 UPSERT
+
+## 9. WebSocket 语音链路
+
+### 9.1 连接方式
+
+推荐：
+
+```text
+ws://localhost:8000/ws/voice?token=<jwt_token>
+```
+
+兼容：
+
+```text
+ws://localhost:8000/ws/voice?user_id=<openid>
+```
+
+协议特征：
+
+- 全部使用 JSON 文本帧
+- 不发送二进制帧
+- 音频数据通过 base64 放在 JSON 字段里
+
+### 9.2 客户端到服务端消息
+
+### `text.message`
 
 ```json
 {
   "type": "text.message",
   "session_id": "s_001",
-  "user_id": "demo_user",
   "text": "我明天有什么安排？"
 }
 ```
 
-#### 5.2.2 开始录音：`audio_start`（建议必发）
+说明：
+
+- 直接跳过 ASR，把文本交给 Agent
+
+### `audio_start`
 
 ```json
 {
   "type": "audio_start",
   "session_id": "s_001",
-  "user_id": "demo_user",
   "format": "pcm_s16le",
   "sampleRate": 16000
 }
@@ -215,45 +564,48 @@
 
 说明：
 
-- 当前实现不会校验 `format/sampleRate`，仅用于日志与未来扩展
-- `audio_start` 会清空服务端音频缓冲区；若不发，可能导致缓冲区残留影响转写
+- 建议发送
+- 会清空服务端当前音频缓冲区
+- 当前实现仅记录 `format/sampleRate`，不做强校验
 
-#### 5.2.3 音频分片：`audio.chunk`
+### `audio.chunk`
 
 ```json
 {
   "type": "audio.chunk",
   "session_id": "s_001",
-  "user_id": "demo_user",
-  "data": "<base64 PCM bytes>"
-}
-```
-
-音频要求（按当前 ASR 实现）：
-
-- `data`：base64 后的原始 PCM bytes
-- PCM：16-bit、mono（服务端在 `audio.end` 时会写 WAV 并调用 DashScope ASR；采样率会在服务端被重采样到 16k）
-- 分片大小建议 < 128KB（大于该值会被记录为 warning）
-
-#### 5.2.4 结束录音：`audio.end` / `audio_end`
-
-```json
-{
-  "type": "audio.end",
-  "session_id": "s_001",
-  "user_id": "demo_user",
-  "sample_rate": 16000
+  "data": "<base64_pcm_bytes>"
 }
 ```
 
 说明：
 
-- `sample_rate` 默认 16000；若前端真实采样率不同，请传真实值，服务端会重采样到 16k 再识别
-- 当前实现不会推送 ASR partial，只在收到 `audio.end` 后进行一次性识别
+- `data` 为 base64 编码后的 PCM 音频字节
+- 单片大于 `128KB` 会被记 warning
 
-### 5.3 服务端 → 客户端消息
+### `audio.end`
 
-#### 5.3.1 转写结果：`transcription`
+```json
+{
+  "type": "audio.end",
+  "session_id": "s_001",
+  "sample_rate": 16000
+}
+```
+
+兼容别名：
+
+- `audio_end`
+
+说明：
+
+- 收到后开始 ASR
+- 当前实现只在 `audio.end` 后返回一次完整转写
+- 不支持 partial ASR 推送
+
+### 9.3 服务端到客户端消息
+
+### `transcription`
 
 ```json
 {
@@ -262,7 +614,7 @@
 }
 ```
 
-#### 5.3.2 Agent 回复：`agent.reply`
+### `agent.reply`
 
 ```json
 {
@@ -274,26 +626,26 @@
 
 说明：
 
-- `need_confirm=true` 表示 Agent 认为当前属于“需要用户确认”的多轮场景（例如冲突/歧义删除/修改）
-- **当前 WebSocket 协议里没有实现显式 `confirm/cancel` 控制消息**；多轮继续依赖用户下一句自然语言（例如“继续”“取消”“那改到四点”）
+- `need_confirm = true` 表示当前轮需要用户继续确认
+- 当前协议没有独立的 `confirm/cancel` 消息类型，继续对话仍走自然语言输入
 
-#### 5.3.3 语音分片：`tts.chunk`
+### `tts.chunk`
 
 ```json
 {
   "type": "tts.chunk",
-  "data": "<base64 audio bytes>",
+  "data": "<base64_audio_bytes>",
   "is_last": false
 }
 ```
 
-说明（实现现状）：
+说明：
 
-- `data` 为 base64 编码的音频 bytes
-- 主路径：来自 AgentScope 捕获的 `speech`（通常为 PCM bytes 分片）
-- 兜底路径：独立 DashScope TTS 回调返回的音频分片 bytes（`format` 字段当前未在协议中携带）
+- `data` 为 base64 编码后的音频字节
+- `is_last = true` 表示该轮最后一个音频分片
+- 当 Agent 侧启用实时流式语音时，`tts.chunk` 可能先于 `agent.reply` 到达
 
-#### 5.3.4 本轮结束：`turn.done`
+### `turn.done`
 
 ```json
 {
@@ -302,28 +654,37 @@
 }
 ```
 
-#### 5.3.5 错误：`error`
+说明：
+
+- 表示当前一轮处理结束
+
+### `error`
 
 ```json
 {
   "type": "error",
-  "message": "asr error: ..."
+  "message": "invalid json"
 }
 ```
 
-常见错误场景：
+常见错误：
 
-- 非法 JSON：`invalid json`
-- 空文本：`empty text`
-- 非法 base64 音频：`invalid base64 audio data`
-- ASR/Agent/TTS 处理异常：`asr error: ...` / `agent error: ...`
+- `invalid json`
+- `empty text`
+- `invalid base64 audio data`
+- `asr error: ...`
+- `agent error: ...`
+- `unknown message type: ...`
 
----
+## 10. 联调建议
 
-## 6. 与配置相关的注意事项（联调必看）
+推荐联调顺序：
 
-关键环境变量（见 `backend/app/core/config.py`）：
+1. 先调用 `POST /api/auth/dev-login` 拿测试 JWT
+2. 用该 JWT 调 `GET /api/events` 验证 HTTP 鉴权
+3. 再用 `ws://localhost:8000/ws/voice?token=<jwt_token>` 验证 WebSocket
 
-- `DASHSCOPE_API_KEY`：未设置时，ASR / TTS / Agent 模型调用可能失败（表现为 WS `error` 或 HTTP 500）
-- `DATABASE_URL`：默认指向本地 Postgres；若要用 SQLite 需改为 async driver（例如 `sqlite+aiosqlite:///...`）
+如果只需要看机器生成的接口定义，可直接打开：
 
+- `http://localhost:8000/docs`
+- `http://localhost:8000/openapi.json`

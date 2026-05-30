@@ -72,6 +72,20 @@ button.blue:hover { background: #5dade2; }
 
 <div class="row">
 <div class="col">
+  <!-- 鉴权 -->
+  <div class="card" style="border-color:#e94560;">
+    <h2>鉴权 Token（必填）</h2>
+    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+      <input id="openidInput" placeholder="输入 openid" style="flex:1;min-width:120px" value="test_user_001">
+      <input id="apiBaseInput" value="http://localhost:8000" style="flex:1;min-width:140px">
+      <button onclick="devLogin()" class="blue" style="flex:0;white-space:nowrap">获取 Token</button>
+    </div>
+    <div style="margin-top:6px;">
+      <input id="tokenInput" placeholder="粘贴 JWT Token（或点上面按钮自动获取）" style="width:100%">
+      <span id="tokenStatus" class="badge badge-err">未设置</span>
+    </div>
+  </div>
+
   <!-- 连接 -->
   <div class="card">
     <h2>连接</h2>
@@ -322,6 +336,46 @@ async function flushTtsPlaybackQueue(auto = true) {
 }
 
 // ============================================================
+// Auth
+// ============================================================
+function getToken() {
+  return document.getElementById('tokenInput').value.trim();
+}
+
+function getApiBase() {
+  return document.getElementById('apiBaseInput').value.trim() || 'http://localhost:8000';
+}
+
+function authHeaders() {
+  const t = getToken();
+  return t ? { 'Authorization': 'Bearer ' + t, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' };
+}
+
+async function devLogin() {
+  const openid = document.getElementById('openidInput').value.trim();
+  const base = getApiBase();
+  if (!openid) { log('请输入 openid', 'error'); return; }
+  log('POST ' + base + '/api/auth/dev-login', 'out');
+  try {
+    const r = await fetch(base + '/api/auth/dev-login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ openid: openid }),
+    });
+    const d = await r.json();
+    if (d.token) {
+      document.getElementById('tokenInput').value = d.token;
+      document.getElementById('tokenStatus').innerHTML = '<span class="badge badge-ok">已获取</span>';
+      log('Token 获取成功 openid=' + d.user.openid, 'in');
+    } else {
+      log('Token 获取失败: ' + JSON.stringify(d), 'error');
+    }
+  } catch (e) {
+    log('登录请求失败: ' + e.message, 'error');
+  }
+}
+
+// ============================================================
 // WebSocket
 // ============================================================
 function connect() {
@@ -405,12 +459,18 @@ function ensureWebSocketConnected() {
     return connectPromise;
   }
 
-  const url = wsUrlInput.value.trim();
+  let url = wsUrlInput.value.trim();
   if (!url) {
     return Promise.reject(new Error('请输入 WebSocket 地址'));
   }
 
-  log('WebSocket 未连接，开始自动连接：' + url, 'out');
+  // 带上 token
+  const token = getToken();
+  if (token) {
+    url += (url.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(token);
+  }
+
+  log('WebSocket 未连接，开始自动连接：' + url.replace(token ? token : '', '***'), 'out');
   updateConnectionStatus(false);
 
   ws = new WebSocket(url);
@@ -754,7 +814,9 @@ async function playAllTts(auto = false) {
 // ============================================================
 // REST API — 日程 CRUD 测试
 // ============================================================
-const API_BASE = 'http://localhost:8000';
+function getApiBase() {
+  return document.getElementById('apiBaseInput').value.trim() || 'http://localhost:8000';
+}
 
 function showRestResult(ok, text) {
   const el = document.getElementById('restResult');
@@ -766,10 +828,10 @@ function showRestResult(ok, text) {
 async function eventsList() {
   const start = document.getElementById('evtStart').value;
   const end = document.getElementById('evtEnd').value;
-  const url = `${API_BASE}/api/events?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`;
+  const url = `${getApiBase()}/api/events?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`;
   log('GET ' + url, 'out');
   try {
-    const r = await fetch(url);
+    const r = await fetch(url, { headers: authHeaders() });
     const d = await r.json();
     log('GET 列表: ' + (d.data||[]).length + ' 条', 'in');
     showRestResult(true, '查询到 ' + (d.data||[]).length + ' 条日程');
@@ -789,11 +851,11 @@ async function eventsCreate() {
     start_time: document.getElementById('evtStart2').value,
     end_time: document.getElementById('evtEnd2').value,
   };
-  log('POST ' + API_BASE + '/api/events ' + JSON.stringify(body), 'out');
+  log('POST ' + getApiBase() + '/api/events ' + JSON.stringify(body), 'out');
   try {
-    const r = await fetch(`${API_BASE}/api/events`, {
+    const r = await fetch(`${getApiBase()}/api/events`, {
       method: 'POST',
-      headers: {'Content-Type': 'application/json'},
+      headers: authHeaders(),
       body: JSON.stringify(body),
     });
     const d = await r.json();
@@ -814,10 +876,10 @@ async function eventsCreate() {
 async function eventsGet() {
   const id = document.getElementById('evtId').value.trim();
   if (!id) { log('请先填写 event_id', 'error'); return; }
-  const url = `${API_BASE}/api/events/${id}`;
+  const url = `${getApiBase()}/api/events/${id}`;
   log('GET ' + url, 'out');
   try {
-    const r = await fetch(url);
+    const r = await fetch(url, { headers: authHeaders() });
     const d = await r.json();
     if (d.code === 0) {
       log('GET 单个: ' + d.data.title + ' | ' + d.data.start_time, 'in');
@@ -840,11 +902,11 @@ async function eventsUpdate() {
     start_time: document.getElementById('evtStart2').value,
     end_time: document.getElementById('evtEnd2').value,
   };
-  log('PUT ' + API_BASE + '/api/events/' + id + ' ' + JSON.stringify(body), 'out');
+  log('PUT ' + getApiBase() + '/api/events/' + id + ' ' + JSON.stringify(body), 'out');
   try {
-    const r = await fetch(`${API_BASE}/api/events/${id}`, {
+    const r = await fetch(`${getApiBase()}/api/events/${id}`, {
       method: 'PUT',
-      headers: {'Content-Type': 'application/json'},
+      headers: authHeaders(),
       body: JSON.stringify(body),
     });
     const d = await r.json();
@@ -865,10 +927,10 @@ async function eventsDelete() {
   const id = document.getElementById('evtId').value.trim();
   if (!id) { log('请先填写 event_id', 'error'); return; }
   if (!confirm('确定删除 ' + id + ' 吗？')) return;
-  const url = `${API_BASE}/api/events/${id}`;
+  const url = `${getApiBase()}/api/events/${id}`;
   log('DELETE ' + url, 'out');
   try {
-    const r = await fetch(url, { method: 'DELETE' });
+    const r = await fetch(url, { method: 'DELETE', headers: authHeaders() });
     const d = await r.json();
     if (d.code === 0) {
       log('DELETE 删除成功', 'in');

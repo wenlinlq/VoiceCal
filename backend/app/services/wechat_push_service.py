@@ -1,5 +1,4 @@
 """微信推送服务：Access Token 管理 + 订阅消息发送 + 定时扫描。"""
-import json
 import logging
 from datetime import datetime
 from typing import Optional
@@ -85,9 +84,10 @@ class WechatPushService:
         openid: str,
         template_id: str,
         page: str,
+        reminder_text: str,
         title: str,
         start_time: str,
-        thing3: str = "日程即将开始",
+        location: str,
     ) -> dict:
         """发送一条微信订阅消息。
 
@@ -101,9 +101,10 @@ class WechatPushService:
             "template_id": template_id,
             "page": page,
             "data": {
-                "thing1": {"value": title[:20]},
-                "time2": {"value": start_time},
-                "thing3": {"value": thing3[:20]},
+                "thing3": {"value": reminder_text[:20]},
+                "phrase5": {"value": title[:20]},
+                "time13": {"value": start_time},
+                "thing4": {"value": location[:20]},
             },
         }
 
@@ -149,7 +150,7 @@ async def scan_and_push_reminders(db: AsyncSession):
     """扫描待推送的日程提醒并发送微信订阅消息。
 
     每分钟执行一次：
-    1. 查询 remind_at <= now+1min AND push_status='pending' AND remind_enabled=true
+    1. 查询 remind_at <= now AND push_status='pending' AND remind_enabled=true
     2. 对每条检查用户是否已授权订阅
     3. 已授权 → 调微信接口 → sent / failed
     4. 未授权 → 标记 no_auth
@@ -160,20 +161,29 @@ async def scan_and_push_reminders(db: AsyncSession):
         return
 
     now = datetime.now()
-    # 查询即将在接下来1分钟内提醒的日程
     result = await db.execute(
         select(Event).where(
             Event.remind_at <= now,
-            Event.remind_enabled == True,
+            Event.remind_enabled.is_(True),
             Event.push_status == "pending",
+            Event.completed.is_(False),
         )
     )
     events = list(result.scalars().all())
 
     if not events:
-        return  # 本轮无事
+        return
 
-    logger.info("[推送定时] 本轮扫描 %d 条待推送日程", len(events))
+    logger.info(
+        "[推送定时] ========== 开始扫描 ========== 共发现 %d 条待推送日程",
+        len(events),
+    )
+    for i, evt in enumerate(events, 1):
+        logger.info(
+            "[推送定时] [%d/%d] 日程: event_id=%s title=\"%s\" user_id=%s remind_at=%s",
+            i, len(events), evt.id, evt.title, evt.user_id,
+            evt.remind_at.isoformat() if evt.remind_at else "未设置",
+        )
 
     sent_count = 0
     failed_count = 0
@@ -181,23 +191,34 @@ async def scan_and_push_reminders(db: AsyncSession):
 
     for event in events:
         try:
+            # 检查用户是否授权订阅
             status = await _get_subscription_status(db, event.user_id, template_id)
             if status != "accept":
                 event.push_status = "no_auth"
                 await db.commit()
                 no_auth_count += 1
-                logger.info("[推送定时] 用户未授权 event_id=%s user_id=%s", event.id, event.user_id)
+                logger.warning(
+                    "[推送定时] ⊘ 跳过推送 — 用户未授权订阅 event_id=%s user_id=%s title=\"%s\"",
+                    event.id, event.user_id, event.title,
+                )
                 continue
 
             start_time_str = event.start_time.strftime("%Y年%m月%d日 %H:%M") if event.start_time else ""
             page = f"pages/event-detail/event-detail?id={event.id}"
 
+            logger.info(
+                "[推送定时] → 正在发送微信订阅消息: openid=%s title=\"%s\" time=%s template_id=%s",
+                event.user_id, event.title, start_time_str, template_id,
+            )
+
             result_data = await wechat_push_service.send_subscribe_message(
                 openid=event.user_id,
                 template_id=template_id,
                 page=page,
+                reminder_text="日程即将开始",
                 title=event.title,
                 start_time=start_time_str,
+                location=event.location or "未填写",
             )
 
             errcode = result_data.get("errcode", -1)
@@ -206,20 +227,30 @@ async def scan_and_push_reminders(db: AsyncSession):
                 event.pushed_at = datetime.now()
                 await db.commit()
                 sent_count += 1
+                logger.info(
+                    "[推送定时] ✓ 微信模版消息发送成功 event_id=%s title=\"%s\" openid=%s",
+                    event.id, event.title, event.user_id,
+                )
             else:
+                errmsg = result_data.get("errmsg", "unknown")
                 event.push_status = "failed"
                 await db.commit()
                 failed_count += 1
+                logger.error(
+                    "[推送定时] ✗ 微信模版消息发送失败 event_id=%s title=\"%s\" errcode=%s errmsg=%s",
+                    event.id, event.title, errcode, errmsg,
+                )
 
         except Exception:
-            logger.exception("[推送定时] 推送异常 event_id=%s", event.id)
+            logger.exception(
+                "[推送定时] ✗ 推送异常 event_id=%s title=\"%s\" openid=%s",
+                event.id, event.title, event.user_id,
+            )
             event.push_status = "failed"
             await db.commit()
             failed_count += 1
 
     logger.info(
-        "[推送定时] 本轮完成，成功=%d 失败=%d 未授权=%d",
-        sent_count,
-        failed_count,
-        no_auth_count,
+        "[推送定时] ========== 本轮完成 ========== 扫描=%d 已推送=%d 失败=%d 未授权=%d",
+        len(events), sent_count, failed_count, no_auth_count,
     )

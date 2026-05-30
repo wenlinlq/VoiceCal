@@ -70,6 +70,7 @@ def _build_event_data(event) -> dict[str, Any]:
         "start_time": _to_iso(event.start_time),
         "end_time": _to_iso(event.end_time),
         "is_all_day": event.is_all_day,
+        "completed": getattr(event, "completed", False),
     }
 
 
@@ -329,6 +330,7 @@ async def add_calendar_event_impl(db: AsyncSession, user_id: str, args: dict[str
             start_time=start_time,
             end_time=end_time,
             is_all_day=bool(args.get("is_all_day", False)),
+            completed=bool(args.get("completed", False)),
         )
     )
     return _ok({"event": _build_event_data(event)}, "日程已创建")
@@ -391,6 +393,8 @@ async def update_calendar_event_impl(db: AsyncSession, user_id: str, args: dict[
             changes["location"] = args["location"]
         if "description" in args:
             changes["description"] = args["description"]
+        if "completed" in args:
+            changes["completed"] = args["completed"]
         return _fail("请确认是否修改此日程", "CONFIRM_REQUIRED", {"preview": preview, "changes": changes})
 
     update = EventUpdate()
@@ -406,6 +410,8 @@ async def update_calendar_event_impl(db: AsyncSession, user_id: str, args: dict[
         update.end_time = _as_aware(_parse_iso_datetime(args["end_time"]))
     if "is_all_day" in args:
         update.is_all_day = args["is_all_day"]
+    if "completed" in args:
+        update.completed = args["completed"]
 
     event = await service.update_event(uuid.UUID(event_id), update)
     if not event:
@@ -615,6 +621,7 @@ TOOL_DEFINITIONS = [
                     "start_time": {"type": "string"},
                     "end_time": {"type": "string"},
                     "is_all_day": {"type": "boolean"},
+                    "completed": {"type": "boolean"},
                     "force": {"type": "boolean"},
                     "allow_past": {"type": "boolean"},
                 },
@@ -649,6 +656,7 @@ TOOL_DEFINITIONS = [
                     "start_time": {"type": "string"},
                     "end_time": {"type": "string"},
                     "is_all_day": {"type": "boolean"},
+                    "completed": {"type": "boolean"},
                 },
                 "required": ["event_id"],
             },
