@@ -12,6 +12,9 @@ class EventCreate(BaseModel):
     start_time: datetime
     end_time: datetime
     is_all_day: bool = False
+    remind_at: Optional[datetime] = None
+    remind_enabled: bool = False
+    subscribe_template_id: Optional[str] = Field(None, max_length=128)
 
 
 class EventUpdate(BaseModel):
@@ -21,6 +24,10 @@ class EventUpdate(BaseModel):
     start_time: Optional[datetime] = None
     end_time: Optional[datetime] = None
     is_all_day: Optional[bool] = None
+    remind_at: Optional[datetime] = None
+    remind_enabled: Optional[bool] = None
+    push_status: Optional[str] = Field(None, max_length=32)
+    subscribe_template_id: Optional[str] = Field(None, max_length=128)
 
 
 class EventResponse(BaseModel):
@@ -32,6 +39,11 @@ class EventResponse(BaseModel):
     start_time: datetime
     end_time: datetime
     is_all_day: bool
+    remind_at: Optional[datetime] = None
+    remind_enabled: bool = False
+    push_status: str = "pending"
+    pushed_at: Optional[datetime] = None
+    subscribe_template_id: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 

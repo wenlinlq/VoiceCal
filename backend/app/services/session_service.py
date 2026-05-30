@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class SessionState:
     session_id: str
-    user_id: str = "demo_user"
+    user_id: str = ""
     connected: bool = True
     pending_action: Optional[str] = None
     pending_event: Optional[dict[str, Any]] = None
@@ -44,7 +44,7 @@ class SessionService:
             self._redis = False  # mark as unavailable
         return self._redis
 
-    async def register(self, session_id: str, user_id: str = "demo_user") -> SessionState:
+    async def register(self, session_id: str, user_id: str = "") -> SessionState:
         existing = await self.get(session_id)
         if existing:
             return await self.set_state(session_id, connected=True, user_id=user_id)

@@ -489,7 +489,7 @@ async function startRecording() {
   try {
     mediaStream = await navigator.mediaDevices.getUserMedia({
       audio: {
-        sampleRate: 16000,
+        sampleRate: { ideal: 16000 },
         channelCount: 1,
         echoCancellation: true,
         noiseSuppression: true,
@@ -526,7 +526,12 @@ async function startRecording() {
   };
 
   source.connect(scriptProcessor);
-  scriptProcessor.connect(audioCtx.destination);
+  // 连接到静音节点 → destination，维持音频图活跃（Windows 上必须连通
+  // destination 才能触发 onaudioprocess），gain=0 确保不产生啸叫/回声
+  const silenceGain = audioCtx.createGain();
+  silenceGain.gain.value = 0;
+  scriptProcessor.connect(silenceGain);
+  silenceGain.connect(audioCtx.destination);
 
   recording = true;
   btnRecord.disabled = true;

@@ -8,9 +8,12 @@ from app.schemas.event_schema import EventCreate, EventUpdate
 from app.services.calendar_service import CalendarService
 
 
+TEST_USER_ID = "test_openid_svc_001"
+
+
 @pytest_asyncio.fixture
 async def service(db_session):
-    return CalendarService(db=db_session)
+    return CalendarService(db=db_session, user_id=TEST_USER_ID)
 
 
 @pytest.fixture
@@ -31,7 +34,7 @@ async def test_create_event(service, sample_event_data):
     assert event.id is not None
     assert isinstance(event.id, uuid.UUID)
     assert event.title == "组会"
-    assert event.user_id == "demo_user"
+    assert event.user_id == TEST_USER_ID
 
 
 @pytest.mark.asyncio

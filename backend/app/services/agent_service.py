@@ -21,7 +21,7 @@ from app.tools.calendar_tools import TOOL_REGISTRY
 logger = logging.getLogger(__name__)
 
 _db_ctx: ContextVar[Any] = ContextVar("db_session")
-_user_id_ctx: ContextVar[str] = ContextVar("user_id", default="demo_user")
+_user_id_ctx: ContextVar[str] = ContextVar("user_id", default="")
 _session_id_ctx: ContextVar[str] = ContextVar("session_id", default="")
 
 WRITE_TOOL_NAMES = {"add_calendar_event", "create_reminder", "delete_calendar_event", "update_calendar_event"}

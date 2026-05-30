@@ -30,6 +30,15 @@ class Settings(BaseSettings):
     milvus_embedding_dims: int = 1024
     milvus_metric_type: str = "COSINE"
 
+    # WeChat Mini Program
+    wechat_appid: str = ""
+    wechat_secret: str = ""
+    wechat_subscribe_template_id: str = ""
+
+    # JWT
+    jwt_secret: str = "change_me_to_a_random_string_at_least_32_chars"
+    jwt_expire_seconds: int = 604800  # 7 days
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
 
