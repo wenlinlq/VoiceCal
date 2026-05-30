@@ -3,7 +3,8 @@ import { devLogin, wechatLogin } from "@/api/auth.js";
 
 const STORAGE_KEY = "wechat_login_info";
 
-const DEV_OPENID = import.meta.env.VITE_DEV_OPENID || "";
+/** H5 / 其它端联调：POST /api/auth/dev-login 使用的 openid */
+export const DEV_OPENID = import.meta.env.VITE_DEV_OPENID || "";
 
 /**
  * 是否微信小程序环境
@@ -13,6 +14,18 @@ export function isMpWeixin() {
   return true;
   // #endif
   // #ifndef MP-WEIXIN
+  return false;
+  // #endif
+}
+
+/**
+ * 是否 H5 等非小程序端（编译期分支）
+ */
+export function isH5() {
+  // #ifdef H5
+  return true;
+  // #endif
+  // #ifndef H5
   return false;
   // #endif
 }
@@ -94,21 +107,52 @@ function buildLoginInfo(authData, extra = {}) {
 }
 
 /**
- * 开发环境登录（H5 / 非微信端）
+ * H5 等环境：POST /api/auth/dev-login 换取 JWT
+ * @param {string} [openid]
  */
-export async function devSilentLogin(openid = DEV_OPENID) {
-  if (!openid) {
+export async function devSilentLogin(openid) {
+  const id = String(openid ?? DEV_OPENID).trim();
+  if (!id) {
     throw new Error(
-      "非微信环境请配置 VITE_DEV_OPENID 以使用 dev-login，或在微信小程序中运行",
+      "H5 请在 .env.local 配置 VITE_DEV_OPENID，或在设置页填写 openid 后登录",
     );
   }
-  const authData = await devLogin(openid);
+  const authData = await devLogin(id);
   const info = buildLoginInfo(authData, {
-    platform: "dev",
+    platform: "h5-dev",
     silent: true,
   });
   setCachedLoginInfo(info);
   return info;
+}
+
+/** 从缓存恢复 JWT（有 token 即视为已登录） */
+export function getCachedAuthIfValid() {
+  const cached = getCachedLoginInfo();
+  if (!cached?.token || !cached?.openid) return null;
+  return {
+    ...cached,
+    fromCache: true,
+    sessionValid: true,
+    backendReady: true,
+  };
+}
+
+/**
+ * 按当前平台登录并拿到 token
+ * - 小程序：wx.login → POST /api/auth/wechat-login
+ * - H5：POST /api/auth/dev-login（须配置或传入 openid）
+ */
+export async function loginForCurrentPlatform(openid) {
+  if (isMpWeixin()) {
+    return wechatSilentLogin();
+  }
+  const cached = getCachedAuthIfValid();
+  if (cached && !openid) {
+    setCachedLoginInfo(cached);
+    return cached;
+  }
+  return devSilentLogin(openid);
 }
 
 /**
@@ -117,7 +161,7 @@ export async function devSilentLogin(openid = DEV_OPENID) {
  */
 export async function wechatSilentLogin() {
   if (!isMpWeixin()) {
-    return devSilentLogin();
+    return loginForCurrentPlatform();
   }
 
   const sessionValid = await checkWechatSession();

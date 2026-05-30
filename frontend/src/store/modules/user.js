@@ -2,7 +2,8 @@ import { defineStore } from "pinia";
 import {
   getCachedLoginInfo,
   setCachedLoginInfo,
-  wechatSilentLogin,
+  loginForCurrentPlatform,
+  devSilentLogin,
 } from "@/utils/wechat-login.js";
 
 export const useUserStore = defineStore("user", {
@@ -72,7 +73,15 @@ export const useUserStore = defineStore("user", {
     },
 
     async silentLogin() {
-      const info = await wechatSilentLogin();
+      const info = await loginForCurrentPlatform();
+      this.applyLoginInfo(info);
+      setCachedLoginInfo(this.loginInfo);
+      return this.loginInfo;
+    },
+
+    /** H5：使用指定 openid 调 POST /api/auth/dev-login */
+    async loginWithDevOpenid(openid) {
+      const info = await devSilentLogin(openid);
       this.applyLoginInfo(info);
       setCachedLoginInfo(this.loginInfo);
       return this.loginInfo;
@@ -80,6 +89,9 @@ export const useUserStore = defineStore("user", {
 
     /** 确保已拿到 JWT（启动时调用） */
     async ensureAuth() {
+      if (!this.token) {
+        this.restoreFromCache();
+      }
       if (this.token) {
         return this.loginInfo;
       }
