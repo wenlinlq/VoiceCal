@@ -1,6 +1,7 @@
 import { defineStore } from "pinia";
 import {
   getCachedLoginInfo,
+  hasValidCachedLoginContext,
   setCachedLoginInfo,
   wechatSilentLogin,
 } from "@/utils/wechat-login.js";
@@ -21,6 +22,8 @@ export const useUserStore = defineStore("user", {
     backendReady: false,
     platform: "",
     silent: true,
+    apiBase: "",
+    mpWeixinAppId: "",
     loginError: "",
   }),
 
@@ -41,6 +44,8 @@ export const useUserStore = defineStore("user", {
         backendReady: state.backendReady,
         platform: state.platform,
         silent: state.silent,
+        apiBase: state.apiBase,
+        mpWeixinAppId: state.mpWeixinAppId,
       };
     },
   },
@@ -60,15 +65,19 @@ export const useUserStore = defineStore("user", {
       this.backendReady = Boolean(info.backendReady);
       this.platform = info.platform || "";
       this.silent = info.silent !== false;
+      this.apiBase = info.apiBase || "";
+      this.mpWeixinAppId = info.mpWeixinAppId || "";
       this.isLoggedIn = Boolean(this.token);
       this.loginError = "";
     },
 
     restoreFromCache() {
       const cached = getCachedLoginInfo();
-      if (cached) {
+      if (cached && hasValidCachedLoginContext(cached)) {
         this.applyLoginInfo(cached);
+        return;
       }
+      this.clearLogin();
     },
 
     async silentLogin() {
@@ -80,7 +89,7 @@ export const useUserStore = defineStore("user", {
 
     /** 确保已拿到 JWT（启动时调用） */
     async ensureAuth() {
-      if (this.token) {
+      if (this.token && hasValidCachedLoginContext(this.loginInfo)) {
         return this.loginInfo;
       }
       return this.silentLogin();

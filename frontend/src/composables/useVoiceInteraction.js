@@ -5,11 +5,18 @@ import { useConfirmStore } from "@/store/modules/confirm.js";
 import { useVoiceRecorder } from "@/composables/useVoiceRecorder.js";
 import { createVoiceWsClient } from "@/composables/useVoiceWsClient.js";
 import { useUserStore } from "@/store/modules/user.js";
-import { detectSound, detectSoundFloat } from "@/utils/audio.js";
+import { isMpWeixin } from "@/utils/wechat-login.js";
+import {
+  detectSound,
+  detectSoundFloat,
+  mergeArrayBuffers,
+} from "@/utils/audio.js";
 
 const RECORD_SILENCE_MS = 3000;
 const QUERY_IDLE_EXIT_MS = 10000;
 const MAX_RECORDING_MS = 15000;
+const CHUNK_SEND_INTERVAL_MS = 200;
+const UPLOAD_CHUNK_BYTES = 32000;
 const EXIT_KEYWORDS = ["退出", "关闭", "结束"];
 const NO_VOICE_NUDGE_TEXT = "没有听到，请再说一遍";
 const WRITE_DONE_KEYWORDS = [
@@ -42,6 +49,8 @@ let recordingStartedAt = 0;
 let lastSoundAt = 0;
 let userTurnScheduled = false;
 let voiceActions = null;
+let pendingChunkBuffers = [];
+let lastChunkSendAt = 0;
 
 function createSessionId() {
   return `s_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -70,6 +79,64 @@ function isWriteCompletionReply(text) {
 
 function getVoiceActions() {
   return voiceActions;
+}
+
+function resetPendingChunks() {
+  pendingChunkBuffers = [];
+  lastChunkSendAt = 0;
+}
+
+function normalizePcmBuffer(audioBuffer) {
+  if (!audioBuffer || audioBuffer.byteLength < 2) {
+    return new ArrayBuffer(0);
+  }
+
+  const view = new DataView(audioBuffer);
+  if (
+    audioBuffer.byteLength >= 44 &&
+    view.getUint32(0, false) === 0x52494646 &&
+    view.getUint32(8, false) === 0x57415645
+  ) {
+    let offset = 12;
+    while (offset + 8 <= audioBuffer.byteLength) {
+      const chunkId = view.getUint32(offset, false);
+      const chunkSize = view.getUint32(offset + 4, true);
+      offset += 8;
+      if (chunkId === 0x64617461) {
+        return audioBuffer.slice(offset, offset + chunkSize);
+      }
+      offset += chunkSize;
+      if (chunkSize % 2 === 1) offset += 1;
+    }
+  }
+
+  return audioBuffer;
+}
+
+function sendBufferedAudio(sessionId, sampleRate, audioBuffer) {
+  const normalizedBuffer = normalizePcmBuffer(audioBuffer);
+  if (!normalizedBuffer || normalizedBuffer.byteLength < 2) {
+    return { ok: false, chunkCount: 0, totalBytes: 0 };
+  }
+
+  const started = voiceWs.sendAudioStart(sessionId, sampleRate);
+  if (!started) {
+    return { ok: false, chunkCount: 0, totalBytes: normalizedBuffer.byteLength };
+  }
+
+  let chunkCount = 0;
+  for (let offset = 0; offset < normalizedBuffer.byteLength; offset += UPLOAD_CHUNK_BYTES) {
+    const end = Math.min(offset + UPLOAD_CHUNK_BYTES, normalizedBuffer.byteLength);
+    const chunk = normalizedBuffer.slice(offset, end);
+    const sent = voiceWs.sendAudioChunk(sessionId, chunk);
+    if (!sent) {
+      return { ok: false, chunkCount, totalBytes: normalizedBuffer.byteLength };
+    }
+    chunkCount += 1;
+  }
+
+  const ended = voiceWs.sendAudioEnd(sessionId, sampleRate);
+  return { ok: Boolean(ended), chunkCount, totalBytes: normalizedBuffer.byteLength };
 }
 
 const voiceWs = createVoiceWsClient({
@@ -152,7 +219,8 @@ export function useVoiceInteraction() {
 
     userTurnScheduled = true;
     stopSilenceWatch();
-    voiceRecorder.stop();
+    await voiceRecorder.stop();
+    resetPendingChunks();
 
     try {
       await voiceWs.waitForAgentSpeechDone();
@@ -171,7 +239,8 @@ export function useVoiceInteraction() {
 
     userTurnScheduled = true;
     stopSilenceWatch();
-    voiceRecorder.stop();
+    await voiceRecorder.stop();
+    resetPendingChunks();
     voiceStore.setQueryListenMode(false);
     isQueryListenRound = false;
 
@@ -194,7 +263,8 @@ export function useVoiceInteraction() {
 
     userTurnScheduled = true;
     stopSilenceWatch();
-    voiceRecorder.stop();
+    await voiceRecorder.stop();
+    resetPendingChunks();
 
     try {
       await voiceWs.waitForAgentSpeechDone();
@@ -220,24 +290,45 @@ export function useVoiceInteraction() {
       hasSpoken = true;
       lastSoundAt = Date.now();
       sentChunkCount = 0;
-      voiceWs.sendAudioStart(voiceStore.sessionId, recordingSampleRate);
+      if (!isMpWeixin()) {
+        voiceWs.sendAudioStart(voiceStore.sessionId, recordingSampleRate);
+      }
     }
 
     if (!audioStreamStarted) return;
 
-    sentChunkCount += 1;
     if (sounded) {
       hasSpoken = true;
       lastSoundAt = Date.now();
     }
 
-    voiceWs.sendAudioChunk(voiceStore.sessionId, frameBuffer);
+    if (isMpWeixin()) return;
+
+    pendingChunkBuffers.push(frameBuffer);
+    const now = Date.now();
+    if (now - lastChunkSendAt >= CHUNK_SEND_INTERVAL_MS) {
+      flushPendingChunks();
+    }
+  }
+
+  function flushPendingChunks() {
+    if (!pendingChunkBuffers.length) return false;
+    const merged = mergeArrayBuffers(pendingChunkBuffers);
+    pendingChunkBuffers = [];
+    const sent = voiceWs.sendAudioChunk(voiceStore.sessionId, merged);
+    if (sent) {
+      sentChunkCount += 1;
+      lastChunkSendAt = Date.now();
+      return true;
+    }
+    return false;
   }
 
   function startSilenceWatch(isAutoListen) {
     stopSilenceWatch();
     recordingStartedAt = Date.now();
     lastSoundAt = recordingStartedAt;
+    resetPendingChunks();
 
     silenceWatchTimer = setInterval(() => {
       if (!voiceStore.sessionOpen || isEnding) return;
@@ -268,7 +359,7 @@ export function useVoiceInteraction() {
           ) {
             isQueryListenRound = false;
             voiceStore.setQueryListenMode(false);
-            finishRecordingAndSend();
+            void finishRecordingAndSend();
           }
           return;
         }
@@ -276,7 +367,7 @@ export function useVoiceInteraction() {
         if (voiceStore.needConfirm) {
           if (silentFor >= RECORD_SILENCE_MS) {
             if (hasSpoken && audioStreamStarted) {
-              finishRecordingAndSend();
+              void finishRecordingAndSend();
             }
           }
           return;
@@ -284,7 +375,7 @@ export function useVoiceInteraction() {
 
         if (silentFor >= RECORD_SILENCE_MS) {
           if (hasSpoken && audioStreamStarted) {
-            finishRecordingAndSend();
+            void finishRecordingAndSend();
           } else {
             handleNoUserVoice();
           }
@@ -293,12 +384,12 @@ export function useVoiceInteraction() {
       }
 
       if (totalFor >= MAX_RECORDING_MS) {
-        finishRecordingAndSend();
+        void finishRecordingAndSend();
         return;
       }
 
       if (hasSpoken && silentFor >= RECORD_SILENCE_MS) {
-        finishRecordingAndSend();
+        void finishRecordingAndSend();
       }
     }, 300);
   }
@@ -308,11 +399,12 @@ export function useVoiceInteraction() {
 
     console.log("[voice] no user voice in 3s, nudge agent");
     stopSilenceWatch();
-    voiceRecorder.stop();
+    await voiceRecorder.stop();
     isEnding = false;
     hasSpoken = false;
     audioStreamStarted = false;
     sentChunkCount = 0;
+    resetPendingChunks();
 
     try {
       await voiceWs.ensureConnected(getAuthToken());
@@ -325,10 +417,44 @@ export function useVoiceInteraction() {
     voiceStore.setStatus(VOICE_STATUS.THINKING);
   }
 
-  function finishRecordingAndSend() {
+  async function finishRecordingAndSend() {
     if (isEnding) return;
 
-    if (!hasSpoken || !audioStreamStarted || sentChunkCount === 0) {
+    console.log("[voice] finishRecordingAndSend start", {
+      status: voiceStore.status,
+      sessionId: voiceStore.sessionId,
+    });
+    isEnding = true;
+    stopSilenceWatch();
+    await voiceRecorder.stop();
+    flushPendingChunks();
+    const stoppedAudioBuffer = voiceRecorder.consumeStoppedAudio();
+    const stoppedAudioMeta = voiceRecorder.getStoppedAudioMeta();
+
+    if (isMpWeixin()) {
+      console.log("[voice] mp stop audio", {
+        duration: stoppedAudioMeta?.duration || 0,
+        fileSize: stoppedAudioMeta?.fileSize || 0,
+        readBytes: stoppedAudioBuffer?.byteLength || 0,
+      });
+    }
+
+    const hasMpStoppedAudio = Boolean(
+      isMpWeixin() &&
+        stoppedAudioBuffer &&
+        stoppedAudioBuffer.byteLength >= 2,
+    );
+
+    if (
+      !hasMpStoppedAudio &&
+      (!hasSpoken || !audioStreamStarted || sentChunkCount === 0)
+    ) {
+      console.warn("[voice] finishRecordingAndSend aborted", {
+        hasSpoken,
+        audioStreamStarted,
+        sentChunkCount,
+      });
+      isEnding = false;
       if (isAutoListenRound && !isQueryListenRound) {
         handleNoUserVoice();
       } else if (!isAutoListenRound) {
@@ -337,16 +463,26 @@ export function useVoiceInteraction() {
       return;
     }
 
-    isEnding = true;
-    stopSilenceWatch();
-    voiceRecorder.stop();
     isQueryListenRound = false;
     voiceStore.setQueryListenMode(false);
+    flushPendingChunks();
 
-    const sent = voiceWs.sendAudioEnd(
-      voiceStore.sessionId,
-      recordingSampleRate,
-    );
+    let sent = false;
+    if (hasMpStoppedAudio) {
+      const upload = sendBufferedAudio(
+        voiceStore.sessionId,
+        recordingSampleRate,
+        stoppedAudioBuffer,
+      );
+      sentChunkCount = upload.chunkCount;
+      sent = upload.ok;
+      console.log("[voice] mp buffered upload", upload);
+    } else {
+      sent = voiceWs.sendAudioEnd(
+        voiceStore.sessionId,
+        recordingSampleRate,
+      );
+    }
 
     if (!sent) {
       isEnding = false;
@@ -367,6 +503,7 @@ export function useVoiceInteraction() {
     hasSpoken = false;
     audioStreamStarted = false;
     sentChunkCount = 0;
+    resetPendingChunks();
     voiceStore.setQueryListenMode(isQueryListenRound);
 
     voiceStore.setStatus(
@@ -385,7 +522,9 @@ export function useVoiceInteraction() {
 
       if (!isAuto) {
         audioStreamStarted = true;
-        voiceWs.sendAudioStart(voiceStore.sessionId, recordingSampleRate);
+        if (!isMpWeixin()) {
+          voiceWs.sendAudioStart(voiceStore.sessionId, recordingSampleRate);
+        }
       }
 
       startSilenceWatch(isAuto);
@@ -419,6 +558,10 @@ export function useVoiceInteraction() {
   }
 
   function exitToIdle() {
+    console.log("[voice] exitToIdle", {
+      status: voiceStore.status,
+      sessionId: voiceStore.sessionId,
+    });
     stopSilenceWatch();
     isEnding = false;
     userTurnScheduled = false;
@@ -434,12 +577,27 @@ export function useVoiceInteraction() {
     voiceWs.disconnect();
   }
 
-  function onMicClick() {
+  async function onMicClick() {
+    console.log("[voice] onMicClick", {
+      status: voiceStore.status,
+      sessionOpen: voiceStore.sessionOpen,
+      isEnding,
+    });
     if (voiceStore.status === VOICE_STATUS.IDLE) {
-      startSession();
-    } else {
-      exitToIdle();
+      await startSession();
+      return;
     }
+
+    if (
+      voiceStore.status === VOICE_STATUS.RECORDING ||
+      voiceStore.status === VOICE_STATUS.AUTO_LISTENING
+    ) {
+      if (isEnding) return;
+      await finishRecordingAndSend();
+      return;
+    }
+
+    exitToIdle();
   }
 
   function closeVoiceSession() {
@@ -449,7 +607,7 @@ export function useVoiceInteraction() {
   async function sendConfirmText(text) {
     confirmStore.hideConfirm();
     stopSilenceWatch();
-    voiceRecorder.stop();
+    await voiceRecorder.stop();
     isEnding = false;
     userTurnScheduled = false;
     isQueryListenRound = false;
@@ -481,7 +639,7 @@ export function useVoiceInteraction() {
     }
 
     stopSilenceWatch();
-    voiceRecorder.stop();
+    await voiceRecorder.stop();
     isEnding = false;
     userTurnScheduled = false;
     isQueryListenRound = false;

@@ -35,7 +35,10 @@ const isListening = computed(
 );
 
 const statusText = computed(() => {
-  if (props.inSession || props.status !== "idle") return "对话中";
+  if (props.status === "recording" || props.status === "auto_listening") {
+    return "结束发送";
+  }
+  if (props.inSession || props.status !== "idle") return "结束对话";
   return "点击说话";
 });
 

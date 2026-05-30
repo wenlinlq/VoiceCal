@@ -3,10 +3,14 @@ import { onLaunch, onShow, onHide } from "@dcloudio/uni-app";
 import { useUserStore } from "@/store/modules/user.js";
 import { useCalendarStore } from "@/store/modules/calendar.js";
 import { checkHealth } from "@/api/health.js";
-import { isMpWeixin } from "@/utils/wechat-login.js";
+import {
+  isMpWeixin,
+  logWechatAuthContext,
+} from "@/utils/wechat-login.js";
 
 onLaunch(async () => {
   console.log("语音日历 App Launch");
+  logWechatAuthContext("[前端启动] 微信登录上下文");
 
   const calendarStore = useCalendarStore();
   const userStore = useUserStore();
@@ -28,6 +32,7 @@ onLaunch(async () => {
   } catch (error) {
     userStore.setLoginError(error?.message || String(error));
     console.error("[登录] 失败：", error);
+    logWechatAuthContext("[登录失败] 当前上下文");
     uni.showToast({ title: "登录失败", icon: "none" });
   }
 

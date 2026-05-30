@@ -23,6 +23,7 @@ from app.api.websocket import router as ws_router
 from app.api.events import router as events_router
 from app.api.auth import router as auth_router
 from app.api.subscribe import router as subscribe_router
+from app.core.config import settings
 from app.db.database import Base, get_engine, sync_schema
 from app.services.push_scheduler import start_push_scheduler, stop_push_scheduler
 
@@ -35,10 +36,24 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def _mask_appid(appid: str) -> str:
+    if not appid:
+        return "(empty)"
+    if len(appid) <= 8:
+        return appid
+    return f"{appid[:4]}***{appid[-4:]}"
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期：启动时自动创建数据库表，启动定时推送调度器。"""
     logger.info("[系统] 应用启动，正在初始化数据库表...")
+    logger.info(
+        "[系统] 微信配置 app_env=%s wechat_appid=%s wechat_secret_set=%s",
+        settings.app_env,
+        _mask_appid(settings.wechat_appid),
+        bool(settings.wechat_secret),
+    )
     async with get_engine().begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
         await conn.run_sync(sync_schema)

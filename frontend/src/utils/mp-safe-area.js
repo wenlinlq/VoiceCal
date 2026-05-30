@@ -15,15 +15,19 @@ export function getMpSafeArea() {
 
   // #ifdef MP-WEIXIN
   try {
-    const sys = uni.getSystemInfoSync()
+    const windowInfo = typeof uni.getWindowInfo === 'function'
+      ? uni.getWindowInfo()
+      : uni.getSystemInfoSync()
     const menu = uni.getMenuButtonBoundingClientRect()
-    const statusBarHeight = sys.statusBarHeight || 0
+    const statusBarHeight = windowInfo.statusBarHeight || 0
     const navBarHeight = (menu.top - statusBarHeight) * 2 + menu.height
     const safeTop = menu.bottom + 8
     const safeBottom =
-      sys.safeAreaInsets?.bottom ??
-      (sys.safeArea ? Math.max(sys.screenHeight - sys.safeArea.bottom, 0) : 0)
-    const capsuleRight = Math.max(sys.windowWidth - menu.left + 10, 16)
+      windowInfo.safeAreaInsets?.bottom ??
+      (windowInfo.safeArea
+        ? Math.max(windowInfo.screenHeight - windowInfo.safeArea.bottom, 0)
+        : 0)
+    const capsuleRight = Math.max(windowInfo.windowWidth - menu.left + 10, 16)
 
     return {
       isMp: true,

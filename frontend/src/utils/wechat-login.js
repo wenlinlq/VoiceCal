@@ -4,6 +4,13 @@ import { devLogin, wechatLogin } from "@/api/auth.js";
 const STORAGE_KEY = "wechat_login_info";
 
 const DEV_OPENID = import.meta.env.VITE_DEV_OPENID || "";
+const MP_WEIXIN_APPID = import.meta.env.VITE_MP_WEIXIN_APPID || "";
+
+function maskAppId(appId) {
+  if (!appId) return "(empty)";
+  if (appId.length <= 8) return appId;
+  return `${appId.slice(0, 4)}***${appId.slice(-4)}`;
+}
 
 /**
  * 是否微信小程序环境
@@ -35,6 +42,38 @@ export function getCachedLoginInfo() {
  */
 export function setCachedLoginInfo(info) {
   uni.setStorageSync(STORAGE_KEY, info);
+}
+
+function getAuthContext() {
+  return {
+    apiBase: API_BASE_URL.replace(/\/$/, ""),
+    mpWeixinAppId: MP_WEIXIN_APPID,
+  };
+}
+
+export function getWechatAuthContext() {
+  return getAuthContext();
+}
+
+export function logWechatAuthContext(tag = "[登录上下文]") {
+  const context = getAuthContext();
+  console.log(tag, {
+    apiBase: context.apiBase,
+    mpWeixinAppId: maskAppId(context.mpWeixinAppId),
+    isMpWeixin: isMpWeixin(),
+  });
+}
+
+function isSameAuthContext(info) {
+  const context = getAuthContext();
+  return (
+    info?.apiBase === context.apiBase &&
+    info?.mpWeixinAppId === context.mpWeixinAppId
+  );
+}
+
+export function hasValidCachedLoginContext(info = getCachedLoginInfo()) {
+  return Boolean(info && isSameAuthContext(info));
 }
 
 /**
@@ -79,6 +118,7 @@ export function checkWechatSession() {
  */
 function buildLoginInfo(authData, extra = {}) {
   const user = authData?.user || {};
+  const context = getAuthContext();
   return {
     openid: user.openid || "",
     unionid: user.unionid || "",
@@ -90,6 +130,8 @@ function buildLoginInfo(authData, extra = {}) {
     platform: extra.platform || "",
     silent: extra.silent !== false,
     code: extra.code || "",
+    apiBase: context.apiBase,
+    mpWeixinAppId: context.mpWeixinAppId,
   };
 }
 
@@ -122,8 +164,22 @@ export async function wechatSilentLogin() {
 
   const sessionValid = await checkWechatSession();
   const cached = getCachedLoginInfo();
+  const sameContext = isSameAuthContext(cached);
 
-  if (sessionValid && cached?.token && cached?.openid) {
+  if (cached && !sameContext) {
+    console.log(
+      "[登录缓存] 检测到后端地址或 AppID 变化，丢弃旧登录缓存",
+      {
+        cachedApiBase: cached.apiBase || "",
+        currentApiBase: getAuthContext().apiBase,
+        cachedMpWeixinAppId: cached.mpWeixinAppId || "",
+        currentMpWeixinAppId: getAuthContext().mpWeixinAppId,
+      },
+    );
+    uni.removeStorageSync(STORAGE_KEY);
+  }
+
+  if (sessionValid && sameContext && cached?.token && cached?.openid) {
     const info = {
       ...cached,
       fromCache: true,

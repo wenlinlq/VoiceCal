@@ -8,6 +8,8 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.services.tts_service import TTSChunk
 
+WS_URL = "/ws/voice?user_id=test_ws_user_001"
+
 
 @pytest.fixture(scope="module")
 def ws_client():
@@ -46,7 +48,7 @@ def test_text_message(mock_agent_cls, mock_factory, mock_tts_fn, ws_client):
     mock_agent_cls.return_value = mock_agent
     mock_tts_fn.return_value = _mock_tts()
 
-    with ws_client.websocket_connect("/ws/voice") as ws:
+    with ws_client.websocket_connect(WS_URL) as ws:
         ws.send_text(json.dumps({
             "type": "text.message",
             "session_id": "sess_demo",
@@ -79,7 +81,7 @@ def test_text_message_splits_large_agent_tts_chunks(mock_agent_cls, mock_factory
     mock_agent_cls.return_value = mock_agent
     mock_tts_fn.return_value = _mock_tts()
 
-    with ws_client.websocket_connect("/ws/voice") as ws:
+    with ws_client.websocket_connect(WS_URL) as ws:
         ws.send_text(json.dumps({
             "type": "text.message",
             "session_id": "sess_demo_stream",
@@ -123,7 +125,7 @@ def test_text_message_streams_agent_tts_in_real_time(mock_agent_cls, mock_factor
     mock_tts = _mock_tts()
     mock_tts_fn.return_value = mock_tts
 
-    with ws_client.websocket_connect("/ws/voice") as ws:
+    with ws_client.websocket_connect(WS_URL) as ws:
         ws.send_text(json.dumps({
             "type": "text.message",
             "session_id": "sess_demo_realtime_stream",
@@ -170,7 +172,7 @@ def test_audio_end_to_end(mock_agent_cls, mock_factory, mock_asr_fn, mock_tts_fn
 
     fake_audio = base64.b64encode(b"fake audio bytes").decode()
 
-    with ws_client.websocket_connect("/ws/voice") as ws:
+    with ws_client.websocket_connect(WS_URL) as ws:
         ws.send_text(json.dumps({
             "type": "audio.chunk",
             "session_id": "sess_demo",
@@ -202,7 +204,7 @@ def test_audio_end_to_end(mock_agent_cls, mock_factory, mock_asr_fn, mock_tts_fn
 
 
 def test_invalid_json(ws_client):
-    with ws_client.websocket_connect("/ws/voice") as ws:
+    with ws_client.websocket_connect(WS_URL) as ws:
         ws.send_text("not json")
         reply = json.loads(ws.receive_text())
         assert reply["type"] == "error"
@@ -210,7 +212,7 @@ def test_invalid_json(ws_client):
 
 
 def test_empty_text(ws_client):
-    with ws_client.websocket_connect("/ws/voice") as ws:
+    with ws_client.websocket_connect(WS_URL) as ws:
         ws.send_text(json.dumps({
             "type": "text.message",
             "session_id": "sess1",
@@ -222,7 +224,7 @@ def test_empty_text(ws_client):
 
 
 def test_unknown_message_type(ws_client):
-    with ws_client.websocket_connect("/ws/voice") as ws:
+    with ws_client.websocket_connect(WS_URL) as ws:
         ws.send_text(json.dumps({
             "type": "weird.type",
             "session_id": "sess1",
@@ -233,7 +235,7 @@ def test_unknown_message_type(ws_client):
 
 
 def test_audio_invalid_base64(ws_client):
-    with ws_client.websocket_connect("/ws/voice") as ws:
+    with ws_client.websocket_connect(WS_URL) as ws:
         ws.send_text(json.dumps({
             "type": "audio.chunk",
             "session_id": "sess1",
@@ -255,7 +257,7 @@ def test_audio_end_surfaces_asr_error(mock_agent_cls, mock_factory, mock_asr_fn,
 
     fake_audio = base64.b64encode(b"fake audio bytes").decode()
 
-    with ws_client.websocket_connect("/ws/voice") as ws:
+    with ws_client.websocket_connect(WS_URL) as ws:
         ws.send_text(json.dumps({
             "type": "audio.chunk",
             "session_id": "sess_demo",
@@ -284,7 +286,7 @@ def test_text_message_surfaces_agent_error(mock_agent_cls, mock_factory, mock_tt
     mock_agent_cls.return_value = mock_agent
     mock_tts_fn.return_value = _mock_tts()
 
-    with ws_client.websocket_connect("/ws/voice") as ws:
+    with ws_client.websocket_connect(WS_URL) as ws:
         ws.send_text(json.dumps({
             "type": "text.message",
             "session_id": "sess_demo",
