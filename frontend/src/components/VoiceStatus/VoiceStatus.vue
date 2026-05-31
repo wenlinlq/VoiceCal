@@ -65,7 +65,7 @@ const label = computed(() => {
 const mainText = computed(() => {
   if (props.errorText) return props.errorText;
   if (!props.replyText) return "";
-  if (props.status === "speaking") return props.replyText;
+  if (props.status === "speaking" || props.status === "auto_listening") return props.replyText;
   if ((props.needConfirm || props.queryListenMode) && isListening.value) {
     return props.replyText;
   }
@@ -92,7 +92,7 @@ const hintText = computed(() => {
 });
 
 const showUserText = computed(() => {
-  return Boolean(props.userText) && props.status === "speaking";
+  return Boolean(props.userText) && (props.status === "speaking" || props.status === "thinking");
 });
 </script>
 

@@ -178,19 +178,22 @@ const voiceWs = createVoiceWsClient({
     isEnding = false;
     const voiceStore = useVoiceStore();
 
+    // 不论什么路径，本轮结束后都同步日历数据
+    const syncPromise = useCalendarStore()
+      .syncAfterVoiceTurn()
+      .catch((err) => console.warn("[voice] sync calendar failed", err));
+
     if (!success) {
+      await syncPromise;
       await getVoiceActions()?.scheduleUserTurnAfterAgent(false);
       return;
     }
 
     if (voiceStore.needConfirm) {
+      await syncPromise;
       await getVoiceActions()?.scheduleUserTurnAfterAgent(false);
       return;
     }
-
-    const syncPromise = useCalendarStore()
-      .syncAfterVoiceTurn()
-      .catch((err) => console.warn("[voice] sync calendar failed", err));
 
     await getVoiceActions()?.scheduleQueryListenAfterAgent(syncPromise);
   },
@@ -232,7 +235,7 @@ export function useVoiceInteraction() {
     try {
       await voiceWs.waitForAgentSpeechDone();
       if (!voiceStore.sessionOpen) return;
-      if (voiceStore.status === VOICE_STATUS.SPEAKING) {
+      if (voiceStore.status !== VOICE_STATUS.IDLE) {
         voiceStore.setStatus(VOICE_STATUS.AUTO_LISTENING);
       }
       await delay(AUTO_LISTEN_RESUME_DELAY_MS);
@@ -281,7 +284,7 @@ export function useVoiceInteraction() {
     try {
       await voiceWs.waitForAgentSpeechDone();
       if (!voiceStore.sessionOpen) return;
-      if (voiceStore.status === VOICE_STATUS.SPEAKING) {
+      if (voiceStore.status !== VOICE_STATUS.IDLE) {
         voiceStore.setStatus(VOICE_STATUS.AUTO_LISTENING);
       }
       await settlePromise;
