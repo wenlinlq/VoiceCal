@@ -121,40 +121,126 @@ def _extract_slots(text: str) -> tuple[Optional[int], Optional[int], Optional[st
 
 
 def _extract_reference_date(current_time: datetime, text: str) -> tuple[datetime, list[str]]:
+    """从文本中提取参考日期，支持多种中文表达。"""
     lowered = text.replace(" ", "")
     missing_fields: list[str] = []
-    if "明天" in lowered:
-        return current_time + timedelta(days=1), missing_fields
+    weekday_map = {"一": 0, "二": 1, "三": 2, "四": 3, "五": 4, "六": 5, "日": 6, "天": 6, "1": 0, "2": 1, "3": 2, "4": 3, "5": 4, "6": 5, "7": 6}
+
+    # ── 相对日期 ──
+    if "大后天" in lowered:
+        return current_time + timedelta(days=3), missing_fields
     if "后天" in lowered:
         return current_time + timedelta(days=2), missing_fields
+    if "明天" in lowered:
+        return current_time + timedelta(days=1), missing_fields
     if "今天" in lowered:
         return current_time, missing_fields
-    if "下周" in lowered:
-        weekday_map = {"一": 0, "二": 1, "三": 2, "四": 3, "五": 4, "六": 5, "日": 6, "天": 6}
-        matched = re.search(r"下周([一二三四五六日天])", lowered)
-        if matched:
-            target_weekday = weekday_map[matched.group(1)]
-            start_of_week = current_time - timedelta(days=current_time.weekday())
-            return start_of_week + timedelta(days=7 + target_weekday), missing_fields
-        missing_fields.append("具体星期")
-        return current_time, missing_fields
-    if "本周" in lowered:
-        weekday_map = {"一": 0, "二": 1, "三": 2, "四": 3, "五": 4, "六": 5, "日": 6, "天": 6}
-        matched = re.search(r"本周([一二三四五六日天])", lowered)
-        if matched:
-            target_weekday = weekday_map[matched.group(1)]
-            start_of_week = current_time - timedelta(days=current_time.weekday())
-            return start_of_week + timedelta(days=target_weekday), missing_fields
-        missing_fields.append("具体星期")
-        return current_time, missing_fields
+    if "大前天" in lowered:
+        return current_time - timedelta(days=3), missing_fields
+    if "前天" in lowered:
+        return current_time - timedelta(days=2), missing_fields
+    if "昨天" in lowered:
+        return current_time - timedelta(days=1), missing_fields
+
+    # "X天后" / "X天之后"
+    days_after = re.search(r"(\d+)天[之以]?后", lowered)
+    if days_after:
+        return current_time + timedelta(days=int(days_after.group(1))), missing_fields
+
+    # "X小时后" / "X小时之后"
+    hours_after = re.search(r"(\d+)小时[之以]?后", lowered)
+    if hours_after:
+        return current_time + timedelta(hours=int(hours_after.group(1))), missing_fields
+
+    # "X分钟后" / "X分钟之后"
+    mins_after = re.search(r"(\d+)分钟[之以]?后", lowered)
+    if mins_after:
+        return current_time + timedelta(minutes=int(mins_after.group(1))), missing_fields
+
+    # "半小时后" / "半小时之后"
+    if "半小时" in lowered and "后" in lowered:
+        return current_time + timedelta(minutes=30), missing_fields
     if "半小时后" in lowered:
         return current_time + timedelta(minutes=30), missing_fields
-    if "十分钟后" in lowered:
-        return current_time + timedelta(minutes=10), missing_fields
-    if "两天后" in lowered:
-        return current_time + timedelta(days=2), missing_fields
+
+    # ── 星期 ──
+    # "下周一" / "下星期3" / "下周2"
+    next_week = re.search(r"下周([一二三四五六日天\d])", lowered)
+    if next_week:
+        wd = weekday_map[next_week.group(1)]
+        start_of_week = current_time - timedelta(days=current_time.weekday())
+        return start_of_week + timedelta(days=7 + wd), missing_fields
+
+    # "下周一" 的变体: "下星期一" / "下个星期一"
+    next_week2 = re.search(r"下(?:个)?(?:星期|礼拜)([一二三四五六日天\d])", lowered)
+    if next_week2:
+        wd = weekday_map[next_week2.group(1)]
+        start_of_week = current_time - timedelta(days=current_time.weekday())
+        return start_of_week + timedelta(days=7 + wd), missing_fields
+
+    # "本周一" / "这周一"
+    this_week = re.search(r"[本这]周([一二三四五六日天\d])", lowered)
+    if this_week:
+        wd = weekday_map[this_week.group(1)]
+        start_of_week = current_time - timedelta(days=current_time.weekday())
+        return start_of_week + timedelta(days=wd), missing_fields
+
+    # "周一" / "星期二"（没有周前缀，默认最近的那个）
+    plain_weekday = re.search(r"(?:星期|礼拜)([一二三四五六日天\d])", lowered)
+    if plain_weekday:
+        wd = weekday_map[plain_weekday.group(1)]
+        days_ahead = wd - current_time.weekday()
+        if days_ahead <= 0:
+            days_ahead += 7
+        return current_time + timedelta(days=days_ahead), missing_fields
+
+    # "下下周" → 下周再往后推7天
+    # （简单兼容，只匹配 "下下周" 模式）
+    if "下下周" in lowered:
+        # 算下周的日期再 +7
+        start_of_week = current_time - timedelta(days=current_time.weekday())
+        return start_of_week + timedelta(days=14 + current_time.weekday()), missing_fields
+
+    # ── 绝对日期 ──
+    # "6月2号" / "12月31日" / "6月2"
+    month_day = re.search(r"(\d{1,2})月(\d{1,2})[号日]?", lowered)
+    if month_day:
+        month = int(month_day.group(1))
+        day = int(month_day.group(2))
+        try:
+            ref = current_time.replace(month=month, day=day, hour=0, minute=0, second=0, microsecond=0)
+            return ref, missing_fields
+        except ValueError:
+            pass
+
+    # 纯数字日: "2号" / "15日"（不含月，默认当前月）
+    day_only = re.search(r"(?<!\d)(\d{1,2})[号日](?![\d年月])", lowered)
+    if day_only:
+        day = int(day_only.group(1))
+        try:
+            ref = current_time.replace(day=day, hour=0, minute=0, second=0, microsecond=0)
+            if ref < current_time:
+                if current_time.month == 12:
+                    ref = ref.replace(year=current_time.year + 1, month=1)
+                else:
+                    ref = ref.replace(month=current_time.month + 1)
+            return ref, missing_fields
+        except ValueError:
+            pass
+
+    # ISO 日期: "2026-06-02"
+    iso_date = re.search(r"(\d{4})-(\d{2})-(\d{2})", lowered)
+    if iso_date:
+        try:
+            y, m, d = int(iso_date.group(1)), int(iso_date.group(2)), int(iso_date.group(3))
+            return current_time.replace(year=y, month=m, day=d, hour=0, minute=0, second=0, microsecond=0), missing_fields
+        except ValueError:
+            pass
+
+    # "工作日" → 返回当前日期（非周末）
     if "工作日" in lowered:
         return current_time, missing_fields
+
     missing_fields.append("具体日期")
     return current_time, missing_fields
 
