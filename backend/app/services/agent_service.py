@@ -11,7 +11,7 @@ from agentscope.formatter import DashScopeChatFormatter
 from agentscope.message import Msg, TextBlock
 from agentscope.model import DashScopeChatModel
 from agentscope.tool import Toolkit, ToolResponse
-from agentscope.tts import DashScopeTTSModel
+from agentscope.tts import DashScopeRealtimeTTSModel
 
 from app.core.config import settings
 from app.services.memory_manager import memory_manager
@@ -54,9 +54,9 @@ class CalendarAgentService:
             stream=True,
         )
         self.formatter = DashScopeChatFormatter()
-        self.tts_model = DashScopeTTSModel(
+        self.tts_model = DashScopeRealtimeTTSModel(
             api_key=settings.dashscope_api_key,
-            model_name="qwen-tts",
+            model_name="qwen-tts-realtime",
         )
         logger.info("[Agent] 初始化日历智能体完成")
 

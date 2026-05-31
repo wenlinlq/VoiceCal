@@ -71,7 +71,27 @@ export const useCalendarStore = defineStore("calendar", {
 
     /** 语音 Agent 一轮 turn.done 后刷新日程列表 */
     async syncAfterVoiceTurn() {
-      return this.fetchEvents(this.currentDate);
+      const previousIds = new Set(this.events.map((event) => String(event.id)));
+      const events = await this.fetchEvents(this.currentDate);
+      const addedDates = [
+        ...new Set(
+          events
+            .filter((event) => !previousIds.has(String(event.id)))
+            .map((event) => event.start_time.slice(0, 10))
+            .filter(Boolean),
+        ),
+      ];
+
+      // 语音新建事件后，将日历焦点切到新增事件所属日期，避免列表仍停留在旧日期。
+      if (addedDates.length === 1 && addedDates[0] !== this.currentDate) {
+        const [year, month] = addedDates[0].split("-").map(Number);
+        this.currentDate = addedDates[0];
+        if (Number.isFinite(year) && Number.isFinite(month)) {
+          this.setViewMonth(year, month - 1);
+        }
+      }
+
+      return events;
     },
 
     async fetchEventById(id) {
