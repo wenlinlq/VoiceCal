@@ -11,7 +11,7 @@ from agentscope.formatter import DashScopeChatFormatter
 from agentscope.message import Msg, TextBlock
 from agentscope.model import DashScopeChatModel
 from agentscope.tool import Toolkit, ToolResponse
-from agentscope.tts import DashScopeRealtimeTTSModel, TTSModelBase
+from agentscope.tts import DashScopeRealtimeTTSModel
 
 from app.core.config import settings
 from app.services.memory_manager import memory_manager
@@ -31,63 +31,6 @@ def _clean_tts_text(text: str) -> str:
     # 去除多余空白
     text = re.sub(r'\s+', ' ', text).strip()
     return text
-
-class _CleanTTSWrapper:
-    """实时 TTS 包装器：在 push 文字之前清洗 emoji 和 Markdown，避免 TTS 朗读垃圾内容。"""
-
-    def __init__(self, inner: DashScopeRealtimeTTSModel):
-        self._inner = inner
-        # 代理所有属性到内部模型
-        self.model_name = inner.model_name
-        self.stream = inner.stream
-        self.supports_streaming_input = inner.supports_streaming_input
-
-    async def push(self, msg, **kwargs):
-        """清洗 msg 文本后再推给 TTS。"""
-        import copy
-        clean_msg = copy.copy(msg)
-        # 清洗 text block 内容
-        cleaned_blocks = []
-        for block in (msg.content or []):
-            if isinstance(block, dict):
-                b = dict(block)
-                if b.get("type") == "text" and "text" in b:
-                    b["text"] = _clean_tts_text(b["text"])
-                cleaned_blocks.append(b)
-            else:
-                cleaned_blocks.append(block)
-        clean_msg.content = cleaned_blocks
-        return await self._inner.push(clean_msg, **kwargs)
-
-    async def synthesize(self, msg=None, **kwargs):
-        if msg:
-            import copy
-            clean_msg = copy.copy(msg)
-            cleaned_blocks = []
-            for block in (msg.content or []):
-                if isinstance(block, dict):
-                    b = dict(block)
-                    if b.get("type") == "text" and "text" in b:
-                        b["text"] = _clean_tts_text(b["text"])
-                    cleaned_blocks.append(b)
-                else:
-                    cleaned_blocks.append(block)
-            clean_msg.content = cleaned_blocks
-            return await self._inner.synthesize(clean_msg, **kwargs)
-        return await self._inner.synthesize(msg, **kwargs)
-
-    async def connect(self):
-        return await self._inner.connect()
-
-    async def close(self):
-        return await self._inner.close()
-
-    async def __aenter__(self):
-        return await self._inner.__aenter__()
-
-    async def __aexit__(self, *args):
-        return await self._inner.__aexit__(*args)
-
 
 _db_ctx: ContextVar[Any] = ContextVar("db_session")
 _user_id_ctx: ContextVar[str] = ContextVar("user_id", default="")
@@ -123,10 +66,15 @@ class CalendarAgentService:
             stream=True,
         )
         self.formatter = DashScopeChatFormatter()
-        self.tts_model = _CleanTTSWrapper(DashScopeRealtimeTTSModel(
-            api_key=settings.dashscope_api_key,
-            model_name="qwen-tts-realtime",
-        ))
+        try:
+            self.tts_model = DashScopeRealtimeTTSModel(
+                api_key=settings.dashscope_api_key,
+                model_name="qwen3-tts-flash-realtime",
+            )
+            logger.info("[Agent] 实时 TTS 就绪: qwen3-tts-flash-realtime")
+        except Exception as e:
+            logger.warning("[Agent] 实时 TTS 不可用(%s)，降级 fallback 模式", e)
+            self.tts_model = None
         logger.info("[Agent] 初始化日历智能体完成")
 
     def _create_toolkit(self, db, user_id: str, tool_calls: list[dict[str, Any]] | None = None) -> Toolkit:
@@ -564,7 +512,29 @@ class CalendarAgentService:
             await hook_result
 
         user_msg = Msg(name="User", content=text, role="user")
-        result_msg = await agent(user_msg)
+        try:
+            result_msg = await agent(user_msg)
+        except Exception as e:
+            if "websocket" in str(e).lower() or "timeout" in str(e).lower():
+                logger.warning("[Agent] 实时 TTS 连接失败，降级无 TTS 模式重试: %s", e)
+                self.tts_model = None
+                toolkit2 = self._create_toolkit(db, user_id, tool_calls)
+                agent2 = ReActAgent(
+                    name="VoiceCalendarAgent",
+                    sys_prompt=build_voice_calendar_system_prompt(),
+                    model=self.model,
+                    formatter=self.formatter,
+                    toolkit=toolkit2,
+                    memory=short_term_memory,
+                    long_term_memory=long_term_memory,
+                    long_term_memory_mode="agent_control",
+                    enable_rewrite_query=False,
+                    tts_model=None,
+                    max_iters=5,
+                )
+                result_msg = await agent2(user_msg)
+            else:
+                raise
         reply_text = result_msg.get_text_content() or ""
 
         # 检测用户是否在进行确认回复（"确认""好的""行"等短句）

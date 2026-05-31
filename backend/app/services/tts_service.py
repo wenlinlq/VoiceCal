@@ -88,13 +88,13 @@ class DashScopeTTSService(TTSService):
         Returns:
             list[TTSChunk]: 音频分片列表，最后一个分片 is_last=True。
         """
-        logger.info("[TTS] 开始语音合成(fallback) 文本长度=%s 模型=qwen-tts", len(text))
+        logger.info("[TTS] 开始语音合成(fallback) 文本长度=%s 模型=sambert-zhichu-v1", len(text))
 
         collector = _ChunkCollector()
 
         def _run():
             SpeechSynthesizer.call(
-                model="qwen-tts",
+                model="sambert-zhichu-v1",
                 text=text,
                 api_key=self.api_key,
                 format="pcm",

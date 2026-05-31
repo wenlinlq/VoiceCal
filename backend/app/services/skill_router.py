@@ -105,11 +105,17 @@ async def _classify_with_llm(text: str, model) -> Optional[CalendarIntent]:
     ])
 
     try:
-        res = await asyncio.wait_for(
-            model(prompt, structured_model=CalendarIntent),
-            timeout=3.0,
-        )
-        if res.metadata:
+        res = model(prompt, structured_model=CalendarIntent)
+        # 处理两种情况：stream=True 返回 async generator，stream=False 返回带 metadata 的对象
+        if hasattr(res, '__aiter__'):
+            last = None
+            async for chunk in res:
+                last = chunk
+            res = last
+        else:
+            res = await asyncio.wait_for(res, timeout=3.0)
+
+        if res and res.metadata:
             intent = CalendarIntent(**res.metadata)
             logger.info("[Skill] LLM 分类结果 intent=%s confidence=%s", intent.intent, intent.confidence)
             return intent
