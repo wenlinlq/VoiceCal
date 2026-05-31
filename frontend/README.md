@@ -90,7 +90,7 @@ frontend/
 └── .env.example
 ```
 
-`pages/news/`、`pages/ucenter/`、`components/FloatingMic/` 等为模板遗留，**当前产品路由未使用**。
+`components/FloatingMic/` 等为模板遗留组件，**当前产品未使用**。
 
 ## 页面与路由
 
