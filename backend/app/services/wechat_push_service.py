@@ -1,5 +1,6 @@
 """微信推送服务：Access Token 管理 + 订阅消息发送 + 定时扫描。"""
 import logging
+import re
 from datetime import datetime
 from typing import Optional
 
@@ -13,6 +14,11 @@ from app.models.event import Event
 from app.models.subscription import UserSubscription
 
 logger = logging.getLogger("wechat-push")
+
+
+def _strip_emoji(text: str) -> str:
+    """去除 emoji 和特殊符号，只保留中文、字母、数字、空格。"""
+    return re.sub(r'[^\w\s一-鿿]', '', text).strip()
 
 ACCESS_TOKEN_KEY = "wechat:access_token"
 ACCESS_TOKEN_BUFFER = 300  # 提前5分钟刷新
@@ -102,7 +108,7 @@ class WechatPushService:
             "page": page,
             "data": {
                 "thing3": {"value": reminder_text[:20]},
-                "phrase5": {"value": title[:20]},
+                "phrase5": {"value": _strip_emoji(title)[:5] or "日程提醒"},
                 "time13": {"value": start_time},
                 "thing4": {"value": location[:20]},
             },
@@ -215,7 +221,7 @@ async def scan_and_push_reminders(db: AsyncSession):
                 openid=event.user_id,
                 template_id=template_id,
                 page=page,
-                reminder_text="日程即将开始",
+                reminder_text=event.title[:20],
                 title=event.title,
                 start_time=start_time_str,
                 location=event.location or "未填写",

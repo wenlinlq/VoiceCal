@@ -154,7 +154,7 @@ export function createVoiceWsClient(handlers = {}) {
     }
 
     if (type === "turn.done") {
-      handlers.onTurnDone?.(Boolean(msg.success));
+      await handlers.onTurnDone?.(Boolean(msg.success));
       return;
     }
 

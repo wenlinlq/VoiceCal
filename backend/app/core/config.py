@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     memory_agent_name: str = "VoiceCalendarAgent"
     memory_llm_model: str = "qwen3.7-max"
     memory_embedding_model: str = "text-embedding-v3"
+    memory_long_term_timeout_seconds: int = 5
     mem0_api_key: str = ""
     mem0_vector_store: str = "milvus"
     mem0_llm_provider: str = ""

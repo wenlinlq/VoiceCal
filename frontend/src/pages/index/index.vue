@@ -58,6 +58,7 @@ import EventFormModal from "@/components/EventFormModal/EventFormModal.vue";
 import {
   prepareEventForSave,
   getRemindSuccessHint,
+  promptSubscribeMessage,
 } from "@/utils/mp-subscribe-message.js";
 
 const calendarStore = useCalendarStore();
@@ -68,6 +69,27 @@ const showCreateForm = ref(false);
 
 onMounted(() => {
   uni.$on("calendar:openCreate", openCreateForm);
+
+  // 小程序环境：首次进入弹微信原生订阅授权
+  // #ifdef MP-WEIXIN
+  const lastHint = uni.getStorageSync("subscribe_hint_at");
+  const now = Date.now();
+  if (!lastHint || now - lastHint > 24 * 60 * 60 * 1000) {
+    uni.showModal({
+      title: "开启日程提醒",
+      content: "允许后，您将在日程开始前收到微信服务通知提醒",
+      cancelText: "暂不",
+      confirmText: "去开启",
+      success: (res) => {
+        if (res.confirm) {
+          // showModal 的 confirm 点击算用户手势，可以触发订阅弹窗
+          promptSubscribeMessage();
+        }
+        uni.setStorageSync("subscribe_hint_at", Date.now());
+      },
+    });
+  }
+  // #endif
 });
 
 onUnmounted(() => {

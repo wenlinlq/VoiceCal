@@ -73,7 +73,7 @@
         <input
           class="ws-input"
           v-model="wsUrl"
-          placeholder="wss://latekin.jufu.vip/ws/voice"
+          placeholder="ws://10.4.137.31:8000/ws/voice"
           @blur="saveWsUrl"
         />
       </view>
