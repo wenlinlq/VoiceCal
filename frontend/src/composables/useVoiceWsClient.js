@@ -13,6 +13,8 @@ export function createVoiceWsClient(handlers = {}) {
   const ttsPlayer = new VoiceTtsPlayer();
   let connectPromise = null;
   let ttsReceivedThisTurn = false;
+  let agentReplyTextReceived = false;
+  let pendingTtsChunks = [];
 
   function sendJson(payload) {
     return wsStore.send(payload);
@@ -42,13 +44,35 @@ export function createVoiceWsClient(handlers = {}) {
 
   function resetTtsTurn() {
     ttsReceivedThisTurn = false;
+    agentReplyTextReceived = false;
+    pendingTtsChunks = [];
     ttsPlayer.reset();
+  }
+
+  async function playTtsChunk(data, isLast) {
+    const played = await ttsPlayer.pushChunk(data, isLast);
+    if (played) {
+      ttsReceivedThisTurn = true;
+      handlers.onTtsStart?.();
+    }
+    return played;
+  }
+
+  async function flushPendingTtsChunks() {
+    if (!pendingTtsChunks.length) return;
+    const chunks = pendingTtsChunks;
+    pendingTtsChunks = [];
+    for (const chunk of chunks) {
+      await playTtsChunk(chunk.data, chunk.isLast);
+    }
   }
 
   function stopTts() {
     ttsPlayer.stopPlayback();
     ttsPlayer.reset();
     ttsReceivedThisTurn = false;
+    agentReplyTextReceived = false;
+    pendingTtsChunks = [];
   }
 
   /** Agent 本轮 TTS 播完（或无 TTS）后再开用户麦 */
@@ -108,16 +132,24 @@ export function createVoiceWsClient(handlers = {}) {
     }
 
     if (type === "agent.reply") {
-      handlers.onAgentReply?.(msg.text || "", Boolean(msg.need_confirm));
+      const text = msg.text || "";
+      handlers.onAgentReply?.(text, Boolean(msg.need_confirm));
+      if (text) {
+        agentReplyTextReceived = true;
+        await flushPendingTtsChunks();
+      } else {
+        pendingTtsChunks = [];
+      }
       return;
     }
 
     if (type === "tts.chunk") {
-      const played = await ttsPlayer.pushChunk(msg.data, Boolean(msg.is_last));
-      if (played) {
-        ttsReceivedThisTurn = true;
-        handlers.onTtsStart?.();
+      const chunk = { data: msg.data, isLast: Boolean(msg.is_last) };
+      if (!agentReplyTextReceived) {
+        pendingTtsChunks.push(chunk);
+        return;
       }
+      await playTtsChunk(chunk.data, chunk.isLast);
       return;
     }
 

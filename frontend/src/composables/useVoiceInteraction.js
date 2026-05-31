@@ -422,6 +422,7 @@ export function useVoiceInteraction() {
       return;
     }
 
+    voiceStore.beginAgentTurn();
     voiceWs.sendText(voiceStore.sessionId, NO_VOICE_NUDGE_TEXT);
     voiceStore.setStatus(VOICE_STATUS.THINKING);
   }
@@ -500,6 +501,11 @@ export function useVoiceInteraction() {
     }
 
     console.log("[voice] audio_end sent, chunks=", sentChunkCount);
+    if (voiceStore.needConfirm) {
+      confirmStore.hideConfirm();
+      voiceStore.needConfirm = false;
+    }
+    voiceStore.beginAgentTurn();
     voiceStore.setStatus(VOICE_STATUS.THINKING);
   }
 
@@ -631,6 +637,7 @@ export function useVoiceInteraction() {
     }
 
     await voiceWs.primeTts(false);
+    voiceStore.beginAgentTurn();
     const sent = voiceWs.sendText(voiceStore.sessionId, text);
     if (!sent) {
       voiceStore.setError("语音连接已断开");
@@ -662,6 +669,7 @@ export function useVoiceInteraction() {
       return;
     }
 
+    voiceStore.beginAgentTurn();
     voiceWs.sendText(voiceStore.sessionId, text.trim());
     voiceStore.setStatus(VOICE_STATUS.THINKING);
   }

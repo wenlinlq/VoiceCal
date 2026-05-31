@@ -85,14 +85,19 @@ export const useVoiceStore = defineStore("voice", {
       this.replyText = "";
     },
 
-    clearTurn() {
-      this.userText = "";
+    /** 用户新一轮输入已提交，等待 Agent 回复前清空上轮展示文案 */
+    beginAgentTurn() {
       this.replyText = "";
+      this.userText = "";
       this.errorText = "";
-      this.needConfirm = false;
-      this.queryListenMode = false;
       this.asrText = "";
       this.asrTempText = "";
+    },
+
+    clearTurn() {
+      this.beginAgentTurn();
+      this.needConfirm = false;
+      this.queryListenMode = false;
     },
 
     reset() {
