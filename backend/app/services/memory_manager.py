@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 from dataclasses import dataclass
@@ -161,6 +162,19 @@ class VoiceCalendarLongTermMemory(LongTermMemoryBase):
         self.inner = inner
         self.user_id = user_id
 
+    async def _with_timeout(self, action: str, coro):
+        timeout_seconds = max(1, int(settings.memory_long_term_timeout_seconds))
+        try:
+            return await asyncio.wait_for(coro, timeout=timeout_seconds)
+        except asyncio.TimeoutError:
+            logger.warning(
+                "[长期记忆] %s 超时已跳过，user_id=%s timeout=%ss",
+                action,
+                self.user_id,
+                timeout_seconds,
+            )
+            return None
+
     async def record(self, msgs: list[Msg | None], **kwargs: Any) -> Any:
         if self.inner is None:
             logger.info("[长期记忆] 跳过写入，长期记忆未启用，user_id=%s", self.user_id)
@@ -171,9 +185,9 @@ class VoiceCalendarLongTermMemory(LongTermMemoryBase):
             _shorten([msg.to_dict() for msg in msgs if msg is not None], 200),
         )
         try:
-            result = await self.inner.record(msgs, **kwargs)
+            result = await self._with_timeout("record", self.inner.record(msgs, **kwargs))
             logger.info("[长期记忆] 写入成功，user_id=%s", self.user_id)
-            return result
+            return result or {}
         except Exception as exc:
             logger.warning("[长期记忆] 写入失败：%s", exc)
             return {}
@@ -188,11 +202,11 @@ class VoiceCalendarLongTermMemory(LongTermMemoryBase):
             _shorten([item.to_dict() for item in msg] if isinstance(msg, list) else msg.to_dict() if isinstance(msg, Msg) else ""),
         )
         try:
-            result = await self.inner.retrieve(msg, limit=limit, **kwargs)
+            result = await self._with_timeout("retrieve", self.inner.retrieve(msg, limit=limit, **kwargs))
             logger.info("[长期记忆] 检索结果：%s", _shorten(result, 200))
             if result:
                 logger.info("[Agent] 已结合长期记忆补全日程参数")
-            return result
+            return result or ""
         except Exception as exc:
             logger.warning("[长期记忆] 检索失败：%s", exc)
             return ""
@@ -208,9 +222,12 @@ class VoiceCalendarLongTermMemory(LongTermMemoryBase):
             _shorten(content),
         )
         try:
-            result = await self.inner.record_to_memory(thinking, content, **kwargs)
+            result = await self._with_timeout(
+                "record_to_memory",
+                self.inner.record_to_memory(thinking, content, **kwargs),
+            )
             logger.info("[长期记忆] 写入成功，user_id=%s", self.user_id)
-            return result
+            return result or ToolResponse(content=[TextBlock(type="text", text="")])
         except Exception as exc:
             logger.warning("[长期记忆] 写入失败：%s", exc)
             return ToolResponse(content=[TextBlock(type="text", text=f"Error recording memory: {exc}")])
@@ -225,7 +242,12 @@ class VoiceCalendarLongTermMemory(LongTermMemoryBase):
             keywords,
         )
         try:
-            result = await self.inner.retrieve_from_memory(keywords, limit=limit, **kwargs)
+            result = await self._with_timeout(
+                "retrieve_from_memory",
+                self.inner.retrieve_from_memory(keywords, limit=limit, **kwargs),
+            )
+            if result is None:
+                return ToolResponse(content=[TextBlock(type="text", text="")])
             text = result.content[0].text if result.content else ""
             logger.info("[长期记忆] 检索结果：%s", _shorten(text, 200))
             if text:

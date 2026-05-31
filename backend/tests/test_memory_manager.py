@@ -1,4 +1,5 @@
 import importlib.util
+import asyncio
 
 import pytest
 
@@ -135,3 +136,19 @@ async def test_create_long_term_memory_uses_mem0_user_scope(monkeypatch):
     assert vector_store_config.config.collection_name == "voice_calendar_memories"
     assert vector_store_config.config.embedding_model_dims == 1024
     assert vector_store_config.config.metric_type == "COSINE"
+
+
+@pytest.mark.asyncio
+async def test_long_term_memory_record_times_out(monkeypatch):
+    monkeypatch.setattr(memory_module.settings, "memory_long_term_timeout_seconds", 1)
+
+    class SlowLongTermMemory:
+        async def record(self, msgs, **kwargs):
+            await asyncio.sleep(2)
+            return {"ok": True}
+
+    memory = VoiceCalendarLongTermMemory(SlowLongTermMemory(), "user_timeout")
+
+    result = await memory.record([])
+
+    assert result == {}

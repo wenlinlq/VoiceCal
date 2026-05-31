@@ -18,6 +18,7 @@ const MAX_RECORDING_MS = 15000;
 const CHUNK_SEND_INTERVAL_MS = 200;
 const UPLOAD_CHUNK_BYTES = 32000;
 const AUTO_LISTEN_RESUME_DELAY_MS = 450;
+const MIC_CLICK_GUARD_MS = 800;
 const EXIT_KEYWORDS = ["退出", "关闭", "结束"];
 const NO_VOICE_NUDGE_TEXT = "没有听到，请再说一遍";
 
@@ -37,6 +38,7 @@ let voiceActions = null;
 let pendingChunkBuffers = [];
 let lastChunkSendAt = 0;
 let activeConversationSessionId = "";
+let micClickLockedUntil = 0;
 
 function createSessionId() {
   return `s_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -172,25 +174,25 @@ const voiceWs = createVoiceWsClient({
     }
   },
 
-  onTurnDone(success) {
+  async onTurnDone(success) {
     isEnding = false;
     const voiceStore = useVoiceStore();
 
     if (!success) {
-      getVoiceActions()?.scheduleUserTurnAfterAgent(false);
+      await getVoiceActions()?.scheduleUserTurnAfterAgent(false);
       return;
     }
 
     if (voiceStore.needConfirm) {
-      getVoiceActions()?.scheduleUserTurnAfterAgent(false);
+      await getVoiceActions()?.scheduleUserTurnAfterAgent(false);
       return;
     }
 
-    useCalendarStore()
+    const syncPromise = useCalendarStore()
       .syncAfterVoiceTurn()
       .catch((err) => console.warn("[voice] sync calendar failed", err));
 
-    getVoiceActions()?.scheduleQueryListenAfterAgent();
+    await getVoiceActions()?.scheduleQueryListenAfterAgent(syncPromise);
   },
 
   onError(message) {
@@ -230,6 +232,9 @@ export function useVoiceInteraction() {
     try {
       await voiceWs.waitForAgentSpeechDone();
       if (!voiceStore.sessionOpen) return;
+      if (voiceStore.status === VOICE_STATUS.SPEAKING) {
+        voiceStore.setStatus(VOICE_STATUS.AUTO_LISTENING);
+      }
       await delay(AUTO_LISTEN_RESUME_DELAY_MS);
       if (!voiceStore.sessionOpen) return;
       await enterAutoListening(queryMode);
@@ -265,7 +270,7 @@ export function useVoiceInteraction() {
   }
 
   /** 查询完成：播完后开麦，等用户说结束或 10s 无声音再退出 */
-  async function scheduleQueryListenAfterAgent() {
+  async function scheduleQueryListenAfterAgent(settlePromise = Promise.resolve()) {
     if (!voiceStore.sessionOpen || userTurnScheduled) return;
 
     userTurnScheduled = true;
@@ -275,6 +280,11 @@ export function useVoiceInteraction() {
 
     try {
       await voiceWs.waitForAgentSpeechDone();
+      if (!voiceStore.sessionOpen) return;
+      if (voiceStore.status === VOICE_STATUS.SPEAKING) {
+        voiceStore.setStatus(VOICE_STATUS.AUTO_LISTENING);
+      }
+      await settlePromise;
       if (!voiceStore.sessionOpen) return;
       await delay(AUTO_LISTEN_RESUME_DELAY_MS);
       if (!voiceStore.sessionOpen) return;
@@ -500,6 +510,7 @@ export function useVoiceInteraction() {
     }
 
     console.log("[voice] audio_end sent, chunks=", sentChunkCount);
+    micClickLockedUntil = Date.now() + MIC_CLICK_GUARD_MS;
     voiceStore.setStatus(VOICE_STATUS.THINKING);
   }
 
@@ -592,6 +603,12 @@ export function useVoiceInteraction() {
       sessionOpen: voiceStore.sessionOpen,
       isEnding,
     });
+
+    if (Date.now() < micClickLockedUntil) {
+      console.log("[voice] onMicClick ignored by guard");
+      return;
+    }
+
     if (voiceStore.status === VOICE_STATUS.IDLE) {
       await startSession();
       return;
@@ -603,6 +620,11 @@ export function useVoiceInteraction() {
     ) {
       if (isEnding) return;
       await finishRecordingAndSend();
+      return;
+    }
+
+    if (voiceStore.status === VOICE_STATUS.THINKING) {
+      console.log("[voice] onMicClick ignored while thinking");
       return;
     }
 
