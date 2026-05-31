@@ -1,6 +1,7 @@
 # 声历 VoiceCal
 
 **AI 语音日程管家 — 用说话管理所有日程**
+🔗 **作品讲解视频：[https://pan.baidu.com/s/1Y6OfzrUhUrX5K0JkRvPKJg?pwd=6z9o ](https://pan.baidu.com/s/1Y6OfzrUhUrX5K0JkRvPKJg?pwd=6z9o)**
 
 > 🔗 **浏览器体验：[https://latekin.jufu.vip](https://latekin.jufu.vip)**
 >
@@ -8,9 +9,10 @@
 >
 > <img src="docs/小程序体验二维码.jpg" width="200" alt="小程序体验二维码" />
 >
-> ⚠️ 小程序因备案审核中暂无法发布，浏览器端功能完整可体验。
+> ⚠️ 小程序备案审核完成时间不确定，若扫码无法体验，可使用浏览器端完整体验。
 
 ---
+
 **前后端一体的语音日历系统。** 前端提供微信小程序（及 H5 联调）的日历界面与语音交互；后端提供 ASR、Agent 推理、日程 CRUD、TTS 与微信推送。用户用自然语言管理日程，两端通过 REST 与 WebSocket 协同完成完整体验。
 
 ---
@@ -224,4 +226,3 @@ calendar/
 ---
 
 _声历 v1.0 · 前端体验 + 后端智能，共同构成语音日历产品_
-
