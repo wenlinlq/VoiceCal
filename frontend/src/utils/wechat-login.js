@@ -3,7 +3,7 @@ import { devLogin, wechatLogin } from "@/api/auth.js";
 
 const STORAGE_KEY = "wechat_login_info";
 
-const DEV_OPENID = import.meta.env.VITE_DEV_OPENID || "";
+export const DEV_OPENID = import.meta.env.VITE_DEV_OPENID || "";
 const MP_WEIXIN_APPID = import.meta.env.VITE_MP_WEIXIN_APPID || "";
 
 function maskAppId(appId) {
@@ -44,10 +44,23 @@ export function setCachedLoginInfo(info) {
   uni.setStorageSync(STORAGE_KEY, info);
 }
 
+function getRuntimeMpAppId() {
+  if (!isMpWeixin()) return "";
+  try {
+    const info = uni.getAccountInfoSync?.();
+    return info?.miniProgram?.appId || "";
+  } catch {
+    return "";
+  }
+}
+
 function getAuthContext() {
+  const runtimeAppId = getRuntimeMpAppId();
   return {
     apiBase: API_BASE_URL.replace(/\/$/, ""),
-    mpWeixinAppId: MP_WEIXIN_APPID,
+    mpWeixinAppId: MP_WEIXIN_APPID || runtimeAppId,
+    configuredMpWeixinAppId: MP_WEIXIN_APPID,
+    runtimeMpWeixinAppId: runtimeAppId,
   };
 }
 
@@ -60,6 +73,8 @@ export function logWechatAuthContext(tag = "[登录上下文]") {
   console.log(tag, {
     apiBase: context.apiBase,
     mpWeixinAppId: maskAppId(context.mpWeixinAppId),
+    configuredMpWeixinAppId: maskAppId(context.configuredMpWeixinAppId),
+    runtimeMpWeixinAppId: maskAppId(context.runtimeMpWeixinAppId),
     isMpWeixin: isMpWeixin(),
   });
 }

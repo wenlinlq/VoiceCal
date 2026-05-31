@@ -1,10 +1,13 @@
 import { defineStore } from "pinia";
+import { devLogin } from "@/api/auth.js";
 import {
   getCachedLoginInfo,
   hasValidCachedLoginContext,
   setCachedLoginInfo,
   wechatSilentLogin,
 } from "@/utils/wechat-login.js";
+
+let authInFlight = null;
 
 export const useUserStore = defineStore("user", {
   state: () => ({
@@ -87,12 +90,29 @@ export const useUserStore = defineStore("user", {
       return this.loginInfo;
     },
 
+    async loginWithDevOpenid(openid) {
+      const info = await devLogin(openid);
+      this.applyLoginInfo({
+        ...info,
+        platform: "dev",
+        silent: true,
+      });
+      setCachedLoginInfo(this.loginInfo);
+      return this.loginInfo;
+    },
+
     /** 确保已拿到 JWT（启动时调用） */
     async ensureAuth() {
       if (this.token && hasValidCachedLoginContext(this.loginInfo)) {
         return this.loginInfo;
       }
-      return this.silentLogin();
+      if (authInFlight) {
+        return authInFlight;
+      }
+      authInFlight = this.silentLogin().finally(() => {
+        authInFlight = null;
+      });
+      return authInFlight;
     },
 
     clearLogin() {

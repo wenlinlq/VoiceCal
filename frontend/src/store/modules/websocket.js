@@ -139,7 +139,10 @@ export const useWebSocketStore = defineStore("websocket", {
     disconnect() {
       if (this.socketTask) {
         try {
-          this.socketTask.close({});
+          this.socketTask.close({
+            code: 1000,
+            reason: "normal",
+          });
         } catch (_) {}
         this.socketTask = null;
       }
