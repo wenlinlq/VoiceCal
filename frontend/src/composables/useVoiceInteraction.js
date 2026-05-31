@@ -11,10 +11,9 @@ import {
   detectSoundFloat,
   mergeArrayBuffers,
 } from "@/utils/audio.js";
-import { resolveVoiceTurnMode } from "@/utils/voice-turn-mode.js";
 
 const RECORD_SILENCE_MS = 3000;
-const QUERY_IDLE_EXIT_MS = 5000;
+const QUERY_IDLE_EXIT_MS = 10000;
 const MAX_RECORDING_MS = 15000;
 const CHUNK_SEND_INTERVAL_MS = 200;
 const UPLOAD_CHUNK_BYTES = 32000;
@@ -133,23 +132,12 @@ function sendBufferedAudio(sessionId, sampleRate, audioBuffer) {
 
   const started = voiceWs.sendAudioStart(sessionId, sampleRate);
   if (!started) {
-    return {
-      ok: false,
-      chunkCount: 0,
-      totalBytes: normalizedBuffer.byteLength,
-    };
+    return { ok: false, chunkCount: 0, totalBytes: normalizedBuffer.byteLength };
   }
 
   let chunkCount = 0;
-  for (
-    let offset = 0;
-    offset < normalizedBuffer.byteLength;
-    offset += UPLOAD_CHUNK_BYTES
-  ) {
-    const end = Math.min(
-      offset + UPLOAD_CHUNK_BYTES,
-      normalizedBuffer.byteLength,
-    );
+  for (let offset = 0; offset < normalizedBuffer.byteLength; offset += UPLOAD_CHUNK_BYTES) {
+    const end = Math.min(offset + UPLOAD_CHUNK_BYTES, normalizedBuffer.byteLength);
     const chunk = normalizedBuffer.slice(offset, end);
     const sent = voiceWs.sendAudioChunk(sessionId, chunk);
     if (!sent) {
@@ -159,11 +147,7 @@ function sendBufferedAudio(sessionId, sampleRate, audioBuffer) {
   }
 
   const ended = voiceWs.sendAudioEnd(sessionId, sampleRate);
-  return {
-    ok: Boolean(ended),
-    chunkCount,
-    totalBytes: normalizedBuffer.byteLength,
-  };
+  return { ok: Boolean(ended), chunkCount, totalBytes: normalizedBuffer.byteLength };
 }
 
 const voiceWs = createVoiceWsClient({
@@ -194,40 +178,24 @@ const voiceWs = createVoiceWsClient({
     isEnding = false;
     const voiceStore = useVoiceStore();
 
+    // 不论什么路径，本轮结束后都同步日历数据
+    const syncPromise = useCalendarStore()
+      .syncAfterVoiceTurn()
+      .catch((err) => console.warn("[voice] sync calendar failed", err));
+
     if (!success) {
+      await syncPromise;
       await getVoiceActions()?.scheduleUserTurnAfterAgent(false);
       return;
     }
 
     if (voiceStore.needConfirm) {
+      await syncPromise;
       await getVoiceActions()?.scheduleUserTurnAfterAgent(false);
       return;
     }
 
-    const syncPromise = useCalendarStore()
-      .syncAfterVoiceTurn()
-      .catch((err) => console.warn("[voice] sync calendar failed", err));
-
-<<<<<<< HEAD
-    const turnMode = resolveVoiceTurnMode(
-      voiceStore.replyText,
-      voiceStore.needConfirm,
-    );
-
-    if (turnMode === "write_done") {
-      getVoiceActions()?.scheduleExitAfterAgent();
-      return;
-    }
-
-    if (turnMode === "query") {
-      getVoiceActions()?.scheduleQueryListenAfterAgent();
-      return;
-    }
-
-    getVoiceActions()?.scheduleUserTurnAfterAgent(false);
-=======
     await getVoiceActions()?.scheduleQueryListenAfterAgent(syncPromise);
->>>>>>> upstream/voice-interaction-update
   },
 
   onError(message) {
@@ -267,7 +235,7 @@ export function useVoiceInteraction() {
     try {
       await voiceWs.waitForAgentSpeechDone();
       if (!voiceStore.sessionOpen) return;
-      if (voiceStore.status === VOICE_STATUS.SPEAKING) {
+      if (voiceStore.status !== VOICE_STATUS.IDLE) {
         voiceStore.setStatus(VOICE_STATUS.AUTO_LISTENING);
       }
       await delay(AUTO_LISTEN_RESUME_DELAY_MS);
@@ -304,13 +272,8 @@ export function useVoiceInteraction() {
     }
   }
 
-<<<<<<< HEAD
-  /** 查询完成：播完后开麦，等用户说结束或 5s 无声音再退出 */
-  async function scheduleQueryListenAfterAgent() {
-=======
   /** 查询完成：播完后开麦，等用户说结束或 10s 无声音再退出 */
   async function scheduleQueryListenAfterAgent(settlePromise = Promise.resolve()) {
->>>>>>> upstream/voice-interaction-update
     if (!voiceStore.sessionOpen || userTurnScheduled) return;
 
     userTurnScheduled = true;
@@ -321,7 +284,7 @@ export function useVoiceInteraction() {
     try {
       await voiceWs.waitForAgentSpeechDone();
       if (!voiceStore.sessionOpen) return;
-      if (voiceStore.status === VOICE_STATUS.SPEAKING) {
+      if (voiceStore.status !== VOICE_STATUS.IDLE) {
         voiceStore.setStatus(VOICE_STATUS.AUTO_LISTENING);
       }
       await settlePromise;
@@ -407,7 +370,7 @@ export function useVoiceInteraction() {
       if (isAutoListen) {
         if (isQueryListenRound) {
           if (!hasSpoken && silentFor >= QUERY_IDLE_EXIT_MS) {
-            console.log("[voice] query idle 5s, auto exit");
+            console.log("[voice] query idle 10s, auto exit");
             exitToIdle();
             return;
           }
@@ -472,7 +435,6 @@ export function useVoiceInteraction() {
       return;
     }
 
-    voiceStore.beginAgentTurn();
     voiceWs.sendText(voiceStore.sessionId, NO_VOICE_NUDGE_TEXT);
     voiceStore.setStatus(VOICE_STATUS.THINKING);
   }
@@ -500,7 +462,9 @@ export function useVoiceInteraction() {
     }
 
     const hasMpStoppedAudio = Boolean(
-      isMpWeixin() && stoppedAudioBuffer && stoppedAudioBuffer.byteLength >= 2,
+      isMpWeixin() &&
+        stoppedAudioBuffer &&
+        stoppedAudioBuffer.byteLength >= 2,
     );
 
     if (
@@ -536,7 +500,10 @@ export function useVoiceInteraction() {
       sent = upload.ok;
       console.log("[voice] mp buffered upload", upload);
     } else {
-      sent = voiceWs.sendAudioEnd(voiceStore.sessionId, recordingSampleRate);
+      sent = voiceWs.sendAudioEnd(
+        voiceStore.sessionId,
+        recordingSampleRate,
+      );
     }
 
     if (!sent) {
@@ -546,15 +513,7 @@ export function useVoiceInteraction() {
     }
 
     console.log("[voice] audio_end sent, chunks=", sentChunkCount);
-<<<<<<< HEAD
-    if (voiceStore.needConfirm) {
-      confirmStore.hideConfirm();
-      voiceStore.needConfirm = false;
-    }
-    voiceStore.beginAgentTurn();
-=======
     micClickLockedUntil = Date.now() + MIC_CLICK_GUARD_MS;
->>>>>>> upstream/voice-interaction-update
     voiceStore.setStatus(VOICE_STATUS.THINKING);
   }
 
@@ -697,7 +656,6 @@ export function useVoiceInteraction() {
     }
 
     await voiceWs.primeTts(false);
-    voiceStore.beginAgentTurn();
     const sent = voiceWs.sendText(voiceStore.sessionId, text);
     if (!sent) {
       voiceStore.setError("语音连接已断开");
@@ -729,7 +687,6 @@ export function useVoiceInteraction() {
       return;
     }
 
-    voiceStore.beginAgentTurn();
     voiceWs.sendText(voiceStore.sessionId, text.trim());
     voiceStore.setStatus(VOICE_STATUS.THINKING);
   }
