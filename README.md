@@ -2,7 +2,7 @@
 
 **AI 语音日程管家 — 用说话管理所有日程**
 
-**作品讲解视频：[https://pan.baidu.com/s/1Y6OfzrUhUrX5K0JkRvPKJg?pwd=6z9o ](https://pan.baidu.com/s/1Y6OfzrUhUrX5K0JkRvPKJg?pwd=6z9o)**
+**作品讲解视频：[https://b23.tv/ZqUnz0b ](https://b23.tv/ZqUnz0b)**
 
 > 🔗 **浏览器体验：[https://latekin.jufu.vip](https://latekin.jufu.vip)**
 >
