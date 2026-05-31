@@ -65,7 +65,8 @@ const label = computed(() => {
 const mainText = computed(() => {
   if (props.errorText) return props.errorText;
   if (!props.replyText) return "";
-  if (props.status === "speaking" || props.status === "auto_listening") return props.replyText;
+  if (props.status === "speaking" || props.status === "auto_listening")
+    return props.replyText;
   if ((props.needConfirm || props.queryListenMode) && isListening.value) {
     return props.replyText;
   }
@@ -79,9 +80,7 @@ const hintText = computed(() => {
   if (props.needConfirm && isListening.value) {
     return "请说「确认」或「取消」，也可点弹窗按钮";
   }
-  if (props.status === "auto_listening") {
-    return "请说话…（3 秒无声音 Agent 会再说一遍）";
-  }
+
   if (props.status === "recording") {
     return "请说话...";
   }
@@ -92,7 +91,10 @@ const hintText = computed(() => {
 });
 
 const showUserText = computed(() => {
-  return Boolean(props.userText) && (props.status === "speaking" || props.status === "thinking");
+  return (
+    Boolean(props.userText) &&
+    (props.status === "speaking" || props.status === "thinking")
+  );
 });
 </script>
 
