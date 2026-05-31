@@ -11,9 +11,10 @@ import {
   detectSoundFloat,
   mergeArrayBuffers,
 } from "@/utils/audio.js";
+import { resolveVoiceTurnMode } from "@/utils/voice-turn-mode.js";
 
 const RECORD_SILENCE_MS = 3000;
-const QUERY_IDLE_EXIT_MS = 10000;
+const QUERY_IDLE_EXIT_MS = 5000;
 const MAX_RECORDING_MS = 15000;
 const CHUNK_SEND_INTERVAL_MS = 200;
 const UPLOAD_CHUNK_BYTES = 32000;
@@ -130,12 +131,23 @@ function sendBufferedAudio(sessionId, sampleRate, audioBuffer) {
 
   const started = voiceWs.sendAudioStart(sessionId, sampleRate);
   if (!started) {
-    return { ok: false, chunkCount: 0, totalBytes: normalizedBuffer.byteLength };
+    return {
+      ok: false,
+      chunkCount: 0,
+      totalBytes: normalizedBuffer.byteLength,
+    };
   }
 
   let chunkCount = 0;
-  for (let offset = 0; offset < normalizedBuffer.byteLength; offset += UPLOAD_CHUNK_BYTES) {
-    const end = Math.min(offset + UPLOAD_CHUNK_BYTES, normalizedBuffer.byteLength);
+  for (
+    let offset = 0;
+    offset < normalizedBuffer.byteLength;
+    offset += UPLOAD_CHUNK_BYTES
+  ) {
+    const end = Math.min(
+      offset + UPLOAD_CHUNK_BYTES,
+      normalizedBuffer.byteLength,
+    );
     const chunk = normalizedBuffer.slice(offset, end);
     const sent = voiceWs.sendAudioChunk(sessionId, chunk);
     if (!sent) {
@@ -145,7 +157,11 @@ function sendBufferedAudio(sessionId, sampleRate, audioBuffer) {
   }
 
   const ended = voiceWs.sendAudioEnd(sessionId, sampleRate);
-  return { ok: Boolean(ended), chunkCount, totalBytes: normalizedBuffer.byteLength };
+  return {
+    ok: Boolean(ended),
+    chunkCount,
+    totalBytes: normalizedBuffer.byteLength,
+  };
 }
 
 const voiceWs = createVoiceWsClient({
@@ -190,7 +206,22 @@ const voiceWs = createVoiceWsClient({
       .syncAfterVoiceTurn()
       .catch((err) => console.warn("[voice] sync calendar failed", err));
 
-    getVoiceActions()?.scheduleQueryListenAfterAgent();
+    const turnMode = resolveVoiceTurnMode(
+      voiceStore.replyText,
+      voiceStore.needConfirm,
+    );
+
+    if (turnMode === "write_done") {
+      getVoiceActions()?.scheduleExitAfterAgent();
+      return;
+    }
+
+    if (turnMode === "query") {
+      getVoiceActions()?.scheduleQueryListenAfterAgent();
+      return;
+    }
+
+    getVoiceActions()?.scheduleUserTurnAfterAgent(false);
   },
 
   onError(message) {
@@ -264,7 +295,7 @@ export function useVoiceInteraction() {
     }
   }
 
-  /** 查询完成：播完后开麦，等用户说结束或 10s 无声音再退出 */
+  /** 查询完成：播完后开麦，等用户说结束或 5s 无声音再退出 */
   async function scheduleQueryListenAfterAgent() {
     if (!voiceStore.sessionOpen || userTurnScheduled) return;
 
@@ -357,7 +388,7 @@ export function useVoiceInteraction() {
       if (isAutoListen) {
         if (isQueryListenRound) {
           if (!hasSpoken && silentFor >= QUERY_IDLE_EXIT_MS) {
-            console.log("[voice] query idle 10s, auto exit");
+            console.log("[voice] query idle 5s, auto exit");
             exitToIdle();
             return;
           }
@@ -450,9 +481,7 @@ export function useVoiceInteraction() {
     }
 
     const hasMpStoppedAudio = Boolean(
-      isMpWeixin() &&
-        stoppedAudioBuffer &&
-        stoppedAudioBuffer.byteLength >= 2,
+      isMpWeixin() && stoppedAudioBuffer && stoppedAudioBuffer.byteLength >= 2,
     );
 
     if (
@@ -488,10 +517,7 @@ export function useVoiceInteraction() {
       sent = upload.ok;
       console.log("[voice] mp buffered upload", upload);
     } else {
-      sent = voiceWs.sendAudioEnd(
-        voiceStore.sessionId,
-        recordingSampleRate,
-      );
+      sent = voiceWs.sendAudioEnd(voiceStore.sessionId, recordingSampleRate);
     }
 
     if (!sent) {
