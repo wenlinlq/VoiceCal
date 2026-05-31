@@ -80,10 +80,10 @@ function stripInvalidMpPermissions() {
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
   const mpWeixinAppId = env.VITE_MP_WEIXIN_APPID || "";
-  const apiHost = env.VITE_API_HOST || "218.244.137.52";
+  const apiHost = env.VITE_API_HOST || "latekin.jufu.vip";
   const apiPort = env.VITE_API_PORT || "8000";
-  const apiUrl = env.VITE_API_URL || `http://${apiHost}:${apiPort}/api`;
-  const wsUrl = env.VITE_WS_URL || `ws://${apiHost}:${apiPort}/ws/voice`;
+  const apiUrl = env.VITE_API_URL || `https://${apiHost}/api`;
+  const wsUrl = env.VITE_WS_URL || `wss://${apiHost}/ws/voice`;
 
   return {
     define: {

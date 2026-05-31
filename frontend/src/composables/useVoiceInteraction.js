@@ -5,7 +5,7 @@ import { useConfirmStore } from "@/store/modules/confirm.js";
 import { useVoiceRecorder } from "@/composables/useVoiceRecorder.js";
 import { createVoiceWsClient } from "@/composables/useVoiceWsClient.js";
 import { useUserStore } from "@/store/modules/user.js";
-import { isMpWeixin } from "@/utils/wechat-login.js";
+import { getCachedLoginInfo, isMpWeixin } from "@/utils/wechat-login.js";
 import {
   detectSound,
   detectSoundFloat,
@@ -17,24 +17,9 @@ const QUERY_IDLE_EXIT_MS = 10000;
 const MAX_RECORDING_MS = 15000;
 const CHUNK_SEND_INTERVAL_MS = 200;
 const UPLOAD_CHUNK_BYTES = 32000;
+const AUTO_LISTEN_RESUME_DELAY_MS = 450;
 const EXIT_KEYWORDS = ["退出", "关闭", "结束"];
 const NO_VOICE_NUDGE_TEXT = "没有听到，请再说一遍";
-const WRITE_DONE_KEYWORDS = [
-  "已创建",
-  "已删除",
-  "已修改",
-  "已添加",
-  "已取消",
-  "已设置",
-  "已安排",
-  "已为你",
-  "已经为你",
-  "帮你安排",
-  "帮你设置",
-  "创建成功",
-  "删除成功",
-  "修改成功",
-];
 
 const voiceRecorder = useVoiceRecorder();
 let silenceWatchTimer = null;
@@ -51,13 +36,42 @@ let userTurnScheduled = false;
 let voiceActions = null;
 let pendingChunkBuffers = [];
 let lastChunkSendAt = 0;
+let activeConversationSessionId = "";
 
 function createSessionId() {
   return `s_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function getAuthToken() {
-  return useUserStore().token || "";
+function getConversationSessionId(forceNew = false) {
+  if (forceNew || !activeConversationSessionId) {
+    activeConversationSessionId = createSessionId();
+  }
+  return activeConversationSessionId;
+}
+
+async function getAuthToken() {
+  const userStore = useUserStore();
+  if (userStore.token) {
+    return userStore.token;
+  }
+
+  const cached = getCachedLoginInfo();
+  if (cached?.token) {
+    userStore.applyLoginInfo(cached);
+    return cached.token;
+  }
+
+  try {
+    const loginInfo = await userStore.ensureAuth();
+    return loginInfo?.token || "";
+  } catch (err) {
+    console.warn("[voice] ensureAuth failed", err);
+    return "";
+  }
+}
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function stopSilenceWatch() {
@@ -70,11 +84,6 @@ function stopSilenceWatch() {
 function checkExitKeyword(text) {
   if (!text) return false;
   return EXIT_KEYWORDS.some((kw) => text.includes(kw));
-}
-
-function isWriteCompletionReply(text) {
-  if (!text) return false;
-  return WRITE_DONE_KEYWORDS.some((kw) => text.includes(kw));
 }
 
 function getVoiceActions() {
@@ -181,11 +190,7 @@ const voiceWs = createVoiceWsClient({
       .syncAfterVoiceTurn()
       .catch((err) => console.warn("[voice] sync calendar failed", err));
 
-    if (isWriteCompletionReply(voiceStore.replyText)) {
-      getVoiceActions()?.scheduleExitAfterAgent();
-    } else {
-      getVoiceActions()?.scheduleQueryListenAfterAgent();
-    }
+    getVoiceActions()?.scheduleQueryListenAfterAgent();
   },
 
   onError(message) {
@@ -224,6 +229,8 @@ export function useVoiceInteraction() {
 
     try {
       await voiceWs.waitForAgentSpeechDone();
+      if (!voiceStore.sessionOpen) return;
+      await delay(AUTO_LISTEN_RESUME_DELAY_MS);
       if (!voiceStore.sessionOpen) return;
       await enterAutoListening(queryMode);
     } catch (err) {
@@ -268,6 +275,8 @@ export function useVoiceInteraction() {
 
     try {
       await voiceWs.waitForAgentSpeechDone();
+      if (!voiceStore.sessionOpen) return;
+      await delay(AUTO_LISTEN_RESUME_DELAY_MS);
       if (!voiceStore.sessionOpen) return;
       await enterAutoListening(true);
     } catch (err) {
@@ -407,7 +416,7 @@ export function useVoiceInteraction() {
     resetPendingChunks();
 
     try {
-      await voiceWs.ensureConnected(getAuthToken());
+      await voiceWs.ensureConnected(await getAuthToken());
     } catch (err) {
       voiceStore.setError("语音连接已断开");
       return;
@@ -517,7 +526,7 @@ export function useVoiceInteraction() {
     }
 
     try {
-      await voiceWs.ensureConnected(getAuthToken());
+      await voiceWs.ensureConnected(await getAuthToken());
       recordingSampleRate = await voiceRecorder.start(onAudioFrame);
 
       if (!isAuto) {
@@ -544,7 +553,7 @@ export function useVoiceInteraction() {
     try {
       voiceWs.resetTtsTurn();
       await voiceWs.primeTts(true);
-      await voiceWs.ensureConnected(getAuthToken());
+      await voiceWs.ensureConnected(await getAuthToken());
     } catch (err) {
       console.error("[voice] ws connect fail", err);
       uni.showToast({ title: "无法连接语音服务", icon: "none" });
@@ -552,7 +561,7 @@ export function useVoiceInteraction() {
     }
 
     voiceStore.openSession();
-    voiceStore.setSessionId(createSessionId());
+    voiceStore.setSessionId(getConversationSessionId());
     await enterRecording(false);
     uni.vibrateShort({ type: "light" });
   }
@@ -615,7 +624,7 @@ export function useVoiceInteraction() {
     voiceStore.needConfirm = false;
 
     try {
-      await voiceWs.ensureConnected(getAuthToken());
+      await voiceWs.ensureConnected(await getAuthToken());
     } catch (err) {
       voiceStore.setError("语音连接已断开");
       return;
@@ -635,7 +644,7 @@ export function useVoiceInteraction() {
 
     if (!voiceStore.sessionOpen) {
       voiceStore.openSession();
-      voiceStore.setSessionId(createSessionId());
+      voiceStore.setSessionId(getConversationSessionId());
     }
 
     stopSilenceWatch();
@@ -647,7 +656,7 @@ export function useVoiceInteraction() {
 
     try {
       await voiceWs.primeTts(true);
-      await voiceWs.ensureConnected(getAuthToken());
+      await voiceWs.ensureConnected(await getAuthToken());
     } catch (err) {
       uni.showToast({ title: "无法连接语音服务", icon: "none" });
       return;

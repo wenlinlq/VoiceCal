@@ -22,6 +22,8 @@ export class VoiceTtsPlayer {
     // #ifdef MP-WEIXIN
     this.innerAudio = null
     this.mpPlaying = false
+    this.mpTurnPlayed = false
+    this.mpPlaybackTimer = null
     // #endif
   }
 
@@ -35,6 +37,9 @@ export class VoiceTtsPlayer {
     this.turnDone = false
     this.streamEnded = false
     this.idleWaiters = []
+    // #ifdef MP-WEIXIN
+    this.mpTurnPlayed = false
+    // #endif
   }
 
   /** turn.done 后调用，允许在收齐/播完音频后进入用户轮次 */
@@ -106,6 +111,10 @@ export class VoiceTtsPlayer {
     this.playbackCursor = 0
     // #endif
     // #ifdef MP-WEIXIN
+    if (this.mpPlaybackTimer) {
+      clearTimeout(this.mpPlaybackTimer)
+      this.mpPlaybackTimer = null
+    }
     this.mpPlaying = false
     if (this.innerAudio) {
       try {
@@ -129,7 +138,7 @@ export class VoiceTtsPlayer {
 
   /**
    * 收到 tts.chunk
-   * 空 data / 空 bytes 的占位包（含 is_last:true）直接忽略，对齐 voice_ws_test.html
+   * 空 data / 空 bytes 的占位包（含 is_last:true）只做收尾，不重复触发整段播放
    */
   async pushChunk(base64Data, isLast = false) {
     if (!base64Data) {
@@ -139,7 +148,9 @@ export class VoiceTtsPlayer {
         await this.flushQueue(true)
         // #endif
         // #ifdef MP-WEIXIN
-        await this.playAllMp()
+        if (this.chunks.length && !this.mpTurnPlayed) {
+          await this.playAllMp()
+        }
         // #endif
         this.checkNotifyIdle()
       }
@@ -154,7 +165,9 @@ export class VoiceTtsPlayer {
         await this.flushQueue(true)
         // #endif
         // #ifdef MP-WEIXIN
-        await this.playAllMp()
+        if (this.chunks.length && !this.mpTurnPlayed) {
+          await this.playAllMp()
+        }
         // #endif
         this.checkNotifyIdle()
       }
@@ -243,12 +256,17 @@ export class VoiceTtsPlayer {
 
   // #ifdef MP-WEIXIN
   async playAllMp() {
+    if (this.mpTurnPlayed) {
+      this.checkNotifyIdle()
+      return
+    }
     if (!this.chunks.length) {
       this.streamEnded = true
       this.checkNotifyIdle()
       return
     }
     const totalLen = this.chunks.reduce((s, c) => s + c.length, 0)
+    const durationMs = Math.max(300, Math.round((totalLen / 2 / this.ttsSampleRate) * 1000))
     const merged = new Uint8Array(totalLen)
     let offset = 0
     for (const chunk of this.chunks) {
@@ -260,10 +278,18 @@ export class VoiceTtsPlayer {
       this.innerAudio = uni.createInnerAudioContext()
       this.innerAudio.onError((err) => {
         console.warn('[tts] play error', err)
+        if (this.mpPlaybackTimer) {
+          clearTimeout(this.mpPlaybackTimer)
+          this.mpPlaybackTimer = null
+        }
         this.mpPlaying = false
         this.checkNotifyIdle()
       })
       this.innerAudio.onEnded(() => {
+        if (this.mpPlaybackTimer) {
+          clearTimeout(this.mpPlaybackTimer)
+          this.mpPlaybackTimer = null
+        }
         this.mpPlaying = false
         this.checkNotifyIdle()
       })
@@ -274,7 +300,16 @@ export class VoiceTtsPlayer {
       filePath,
       data: wav,
       success: () => {
+        this.mpTurnPlayed = true
         this.mpPlaying = true
+        if (this.mpPlaybackTimer) {
+          clearTimeout(this.mpPlaybackTimer)
+        }
+        this.mpPlaybackTimer = setTimeout(() => {
+          this.mpPlaybackTimer = null
+          this.mpPlaying = false
+          this.checkNotifyIdle()
+        }, durationMs + 500)
         this.innerAudio.src = filePath
         this.innerAudio.play()
       },
