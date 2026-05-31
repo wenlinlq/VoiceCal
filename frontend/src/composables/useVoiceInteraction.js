@@ -11,15 +11,16 @@ import {
   detectSoundFloat,
   mergeArrayBuffers,
 } from "@/utils/audio.js";
+import { resolveVoiceTurnMode } from "@/utils/voice-turn-mode.js";
 
 const RECORD_SILENCE_MS = 3000;
-const QUERY_IDLE_EXIT_MS = 10000;
+const QUERY_IDLE_EXIT_MS = 5000;
 const MAX_RECORDING_MS = 15000;
 const CHUNK_SEND_INTERVAL_MS = 200;
 const UPLOAD_CHUNK_BYTES = 32000;
 const AUTO_LISTEN_RESUME_DELAY_MS = 450;
 const MIC_CLICK_GUARD_MS = 800;
-const EXIT_KEYWORDS = ["退出", "关闭", "结束"];
+const EXIT_KEYWORDS = ["退出", "关闭", "结束", "结束对话"];
 const NO_VOICE_NUDGE_TEXT = "没有听到，请再说一遍";
 
 const voiceRecorder = useVoiceRecorder();
@@ -195,7 +196,21 @@ const voiceWs = createVoiceWsClient({
       return;
     }
 
-    await getVoiceActions()?.scheduleQueryListenAfterAgent(syncPromise);
+    const turnMode = resolveVoiceTurnMode(
+      voiceStore.replyText,
+      voiceStore.needConfirm,
+    );
+    if (turnMode === "write_done") {
+      await getVoiceActions()?.scheduleExitAfterAgent(syncPromise);
+      return;
+    }
+    if (turnMode === "query") {
+      await getVoiceActions()?.scheduleQueryListenAfterAgent(syncPromise);
+      return;
+    }
+
+    await syncPromise;
+    await getVoiceActions()?.scheduleUserTurnAfterAgent(false);
   },
 
   onError(message) {
@@ -249,7 +264,7 @@ export function useVoiceInteraction() {
   }
 
   /** 增删改完成：播完后自动断开 WS */
-  async function scheduleExitAfterAgent() {
+  async function scheduleExitAfterAgent(settlePromise = Promise.resolve()) {
     if (!voiceStore.sessionOpen || userTurnScheduled) return;
 
     userTurnScheduled = true;
@@ -262,6 +277,8 @@ export function useVoiceInteraction() {
     try {
       await voiceWs.waitForAgentSpeechDone();
       if (!voiceStore.sessionOpen) return;
+      await settlePromise;
+      if (!voiceStore.sessionOpen) return;
       console.log("[voice] write op done, auto exit");
       exitToIdle();
     } catch (err) {
@@ -272,7 +289,7 @@ export function useVoiceInteraction() {
     }
   }
 
-  /** 查询完成：播完后开麦，等用户说结束或 10s 无声音再退出 */
+  /** 查询完成：播完后开麦，等用户说结束或 5s 无声音再退出 */
   async function scheduleQueryListenAfterAgent(settlePromise = Promise.resolve()) {
     if (!voiceStore.sessionOpen || userTurnScheduled) return;
 
@@ -370,7 +387,7 @@ export function useVoiceInteraction() {
       if (isAutoListen) {
         if (isQueryListenRound) {
           if (!hasSpoken && silentFor >= QUERY_IDLE_EXIT_MS) {
-            console.log("[voice] query idle 10s, auto exit");
+            console.log("[voice] query idle 5s, auto exit");
             exitToIdle();
             return;
           }
@@ -623,11 +640,6 @@ export function useVoiceInteraction() {
     ) {
       if (isEnding) return;
       await finishRecordingAndSend();
-      return;
-    }
-
-    if (voiceStore.status === VOICE_STATUS.THINKING) {
-      console.log("[voice] onMicClick ignored while thinking");
       return;
     }
 
