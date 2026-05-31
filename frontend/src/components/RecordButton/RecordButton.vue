@@ -1,7 +1,11 @@
 <template>
   <view
     class="record-btn"
-    :class="[`status-${status}`, `pos-${position}`, { 'in-session': inSession }]"
+    :class="[
+      `status-${status}`,
+      `pos-${position}`,
+      { 'in-session': inSession },
+    ]"
     @tap.stop="onTap"
   >
     <view v-if="isListening" class="wave-ring ring-1" />
@@ -22,7 +26,9 @@ const props = defineProps({
     type: String,
     default: "idle",
     validator: (v) =>
-      ["idle", "recording", "thinking", "speaking", "auto_listening"].includes(v),
+      ["idle", "recording", "thinking", "speaking", "auto_listening"].includes(
+        v,
+      ),
   },
   inSession: { type: Boolean, default: false },
   position: { type: String, default: "bottom" },
@@ -36,10 +42,10 @@ const isListening = computed(
 
 const statusText = computed(() => {
   if (props.status === "recording" || props.status === "auto_listening") {
-    return "结束发送";
+    return "说完了";
   }
   if (props.inSession || props.status !== "idle") return "结束对话";
-  return "点击说话";
+  return "开始对话";
 });
 
 function onTap() {

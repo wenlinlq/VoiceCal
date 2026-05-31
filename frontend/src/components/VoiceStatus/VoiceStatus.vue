@@ -74,7 +74,7 @@ const mainText = computed(() => {
 
 const hintText = computed(() => {
   if (props.queryListenMode && isListening.value) {
-    return "说「结束」或「关闭」退出，10 秒无声音将自动结束";
+    return "点击空白位置可结束对话，5 秒无声音将自动结束";
   }
   if (props.needConfirm && isListening.value) {
     return "请说「确认」或「取消」，也可点弹窗按钮";
