@@ -9,6 +9,27 @@
         <button class="login-btn primary" :disabled="loading" @click="loginAs('七牛云老师')">
           {{ loading ? "进入中..." : "🎓 以「七牛云老师」身份进入" }}
         </button>
+
+        <view class="divider">
+          <view class="divider-line" />
+          <text class="divider-text">或输入自定义 ID 进入</text>
+          <view class="divider-line" />
+        </view>
+
+        <input
+          class="form-input"
+          type="text"
+          v-model="openid"
+          placeholder="输入你的 ID（如：张三、demo_user）"
+          confirm-type="done"
+          @confirm="doLogin"
+        />
+        <button class="login-btn" :disabled="loading" @click="doLogin">
+          {{ loading ? "进入中..." : "进入系统" }}
+        </button>
+        <view class="id-hint">
+          <text>💡 不同 ID 之间的日程数据互相隔离独立</text>
+        </view>
         <text v-if="error" class="login-error">{{ error }}</text>
       </view>
 
@@ -35,8 +56,14 @@ import { useUserStore } from "@/store/modules/user.js";
 import { devSilentLogin } from "@/utils/wechat-login.js";
 
 const userStore = useUserStore();
+const openid = ref("");
 const loading = ref(false);
 const error = ref("");
+
+async function doLogin() {
+  const id = openid.value.trim() || "demo_user";
+  await loginAs(id);
+}
 
 async function loginAs(id) {
   loading.value = true;
@@ -136,6 +163,52 @@ async function doMpLogin() {
   display: block;
   margin-top: 16rpx;
   text-align: center;
+}
+
+.divider {
+  display: flex;
+  align-items: center;
+  margin: 32rpx 0 24rpx;
+}
+
+.divider-line {
+  flex: 1;
+  height: 1rpx;
+  background: #e0e0e0;
+}
+
+.divider-text {
+  font-size: 24rpx;
+  color: #bbb;
+  padding: 0 20rpx;
+  flex-shrink: 0;
+}
+
+.form-input {
+  display: block;
+  position: relative;
+  z-index: 1;
+  border: 2rpx solid #ccc;
+  border-radius: 12rpx;
+  padding: 24rpx;
+  font-size: 30rpx;
+  margin-bottom: 24rpx;
+  background: #fff;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 88rpx;
+  line-height: 1.5;
+  outline: none;
+}
+
+.id-hint {
+  margin-top: 16rpx;
+  text-align: center;
+}
+
+.id-hint text {
+  font-size: 22rpx;
+  color: #aaa;
 }
 
 .platform-notice {

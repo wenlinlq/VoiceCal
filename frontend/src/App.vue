@@ -26,7 +26,7 @@ onLaunch(async () => {
   // #ifdef H5
   // H5 走登录页，不在 onLaunch 里自动登录
   if (!userStore.token) {
-    console.log("[H5] 未登录，跳转登录页");
+    uni.reLaunch({ url: "/pages/login/login" });
     return;
   }
   // #endif
