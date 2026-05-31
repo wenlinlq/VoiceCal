@@ -23,12 +23,18 @@ onLaunch(async () => {
     console.warn("[后端] 健康检查失败", error);
   }
 
+  // #ifdef H5
+  // H5 走登录页，不在 onLaunch 里自动登录
+  if (!userStore.token) {
+    uni.reLaunch({ url: "/pages/login/login" });
+    return;
+  }
+  // #endif
+
+  // #ifdef MP-WEIXIN
   try {
     const loginInfo = await userStore.ensureAuth();
-    console.log(
-      isMpWeixin() ? "[微信登录] 成功" : "[开发登录] 成功",
-      loginInfo.openid,
-    );
+    console.log("[微信登录] 成功", loginInfo.openid);
   } catch (error) {
     userStore.setLoginError(error?.message || String(error));
     console.error("[登录] 失败：", error);
@@ -40,6 +46,7 @@ onLaunch(async () => {
     console.warn("[后端] 未登录，跳过日程加载");
     return;
   }
+  // #endif
 
   try {
     await calendarStore.fetchEvents();

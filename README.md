@@ -1,11 +1,11 @@
-# VoiceCal
+# 声历 VoiceCal
 
-语音日历项目仓库。
+**AI 语音日程管家 — 用说话管理所有日程**
 
-## 目录结构
+> 🔗 **体验地址：[https://latekin.jufu.vip](https://latekin.jufu.vip)**
 
-- `frontend/`: 前端工程
-- `backend/`: FastAPI + AgentScope Runtime 后端
+---
+
 
 **前后端一体的语音日历系统。** 前端提供微信小程序（及 H5 联调）的日历界面与语音交互；后端提供 ASR、Agent 推理、日程 CRUD、TTS 与微信推送。用户用自然语言管理日程，两端通过 REST 与 WebSocket 协同完成完整体验。
 
@@ -210,3 +210,4 @@ calendar/
 ---
 
 _声历 v1.0 · 前端体验 + 后端智能，共同构成语音日历产品_
+

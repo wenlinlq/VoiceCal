@@ -20,6 +20,18 @@ from app.tools.calendar_tools import TOOL_REGISTRY
 
 logger = logging.getLogger(__name__)
 
+def _clean_tts_text(text: str) -> str:
+    """清洗 TTS 朗读文本：去除 emoji、Markdown 格式、多余空白。"""
+    import re
+    # 去除 emoji 和特殊符号（保留中文、字母、数字、标点、空格）
+    text = re.sub(r'[^一-鿿　-〿＀-￯a-zA-Z0-9\s.,!?;:()（）【】《》""''、。，！？；：…—\-+]', '', text)
+    # 去除 Markdown: **bold** *italic* `code`
+    text = re.sub(r'\*{1,2}([^*]+)\*{1,2}', r'\1', text)
+    text = re.sub(r'`([^`]+)`', r'\1', text)
+    # 去除多余空白
+    text = re.sub(r'\s+', ' ', text).strip()
+    return text
+
 _db_ctx: ContextVar[Any] = ContextVar("db_session")
 _user_id_ctx: ContextVar[str] = ContextVar("user_id", default="")
 _session_id_ctx: ContextVar[str] = ContextVar("session_id", default="")
@@ -50,14 +62,19 @@ class CalendarAgentService:
     def __init__(self):
         self.model = DashScopeChatModel(
             api_key=settings.dashscope_api_key,
-            model_name="qwen3.7-max",
+            model_name="qwen-plus",
             stream=True,
         )
         self.formatter = DashScopeChatFormatter()
-        self.tts_model = DashScopeRealtimeTTSModel(
-            api_key=settings.dashscope_api_key,
-            model_name="qwen-tts-realtime",
-        )
+        try:
+            self.tts_model = DashScopeRealtimeTTSModel(
+                api_key=settings.dashscope_api_key,
+                model_name="qwen3-tts-flash-realtime",
+            )
+            logger.info("[Agent] 实时 TTS 就绪: qwen3-tts-flash-realtime")
+        except Exception as e:
+            logger.warning("[Agent] 实时 TTS 不可用(%s)，降级 fallback 模式", e)
+            self.tts_model = None
         logger.info("[Agent] 初始化日历智能体完成")
 
     def _create_toolkit(self, db, user_id: str, tool_calls: list[dict[str, Any]] | None = None) -> Toolkit:
@@ -380,6 +397,20 @@ class CalendarAgentService:
         if session_state is not None:
             logger.info("[Agent] 当前 session_state=%s", session_state)
 
+        # ── Skill Router 快速路径 ──
+        from app.services.skill_router import route_with_skill
+
+        skill_result = await route_with_skill(db, user_id, text, self.model)
+        if skill_result is not None:
+            logger.info("[Agent] Skill 命中，跳过 ReActAgent")
+            return {
+                "reply_text": skill_result["reply_text"],
+                "speech": None,
+                "raw_msg": None,
+                "need_confirm": skill_result.get("need_confirm", False),
+                "speech_streamed": False,
+            }
+
         tool_calls: list[dict[str, Any]] = []
         toolkit = self._create_toolkit(db, user_id, tool_calls)
         agent = ReActAgent(
@@ -390,9 +421,10 @@ class CalendarAgentService:
             toolkit=toolkit,
             memory=short_term_memory,
             long_term_memory=long_term_memory,
-            long_term_memory_mode="both",
+            long_term_memory_mode="agent_control",
+            enable_rewrite_query=False,
             tts_model=self.tts_model,
-            max_iters=8,
+            max_iters=5,
         )
 
         # WebSocket 服务端只需要把 TTS 音频分片转发给前端，不应在云端容器内尝试本地播放。
@@ -480,7 +512,29 @@ class CalendarAgentService:
             await hook_result
 
         user_msg = Msg(name="User", content=text, role="user")
-        result_msg = await agent(user_msg)
+        try:
+            result_msg = await agent(user_msg)
+        except Exception as e:
+            if "websocket" in str(e).lower() or "timeout" in str(e).lower():
+                logger.warning("[Agent] 实时 TTS 连接失败，降级无 TTS 模式重试: %s", e)
+                self.tts_model = None
+                toolkit2 = self._create_toolkit(db, user_id, tool_calls)
+                agent2 = ReActAgent(
+                    name="VoiceCalendarAgent",
+                    sys_prompt=build_voice_calendar_system_prompt(),
+                    model=self.model,
+                    formatter=self.formatter,
+                    toolkit=toolkit2,
+                    memory=short_term_memory,
+                    long_term_memory=long_term_memory,
+                    long_term_memory_mode="agent_control",
+                    enable_rewrite_query=False,
+                    tts_model=None,
+                    max_iters=5,
+                )
+                result_msg = await agent2(user_msg)
+            else:
+                raise
         reply_text = result_msg.get_text_content() or ""
 
         # 检测用户是否在进行确认回复（"确认""好的""行"等短句）
@@ -505,7 +559,7 @@ class CalendarAgentService:
             (call.get("result") or {}).get("error_code") in confirm_error_codes
             for call in tool_calls
         )
-        cleaned_reply = reply_text.strip()
+        cleaned_reply = _clean_tts_text(reply_text.strip())
         looks_like_progress = (not cleaned_reply) or cleaned_reply.endswith(("…", "...", "……"))
         if has_confirming_tool_result and looks_like_progress:
             tool_fallback_reply = self._format_confirmation_reply(tool_calls)
